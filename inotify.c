@@ -160,18 +160,20 @@ inotify_create_watches(int fd)
 		add_watch(fd, media_path->path);
 		num_watches++;
 	}
+
 	sql_get_table(db, "SELECT PATH from DETAILS where MIME is NULL and PATH is not NULL", &result, &rows, NULL);
+
 	for( i=1; i <= rows; i++ )
 	{
 	  if(!IsMediaPath(result[i]))
 	  {
-		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
-		add_watch(fd, result[i]);
-		num_watches++;
-	}
+	    DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
+		 add_watch(fd, result[i]);
+		 num_watches++;
+	  }
 	}
 	sqlite3_free_table(result);
-		
+
 	max_watches = fopen("/proc/sys/fs/inotify/max_user_watches", "r");
 	if( max_watches )
 	{
@@ -358,7 +360,7 @@ inotify_insert_file(char * name, const char * path)
 			return -1;
 			break;
 	}
-	
+
 	/* If it's already in the database and hasn't been modified, skip it. */
 	if( stat(path, &st) != 0 )
 		return -1;
@@ -372,10 +374,11 @@ inotify_insert_file(char * name, const char * path)
 	}
 	else if( ts < st.st_mtime )
 	{
-		if( ts > 0 ) {
-			DPRINTF(E_DEBUG, L_INOTIFY, "%s is newer than the last db entry.\n", path);
-		inotify_remove_file(path);
-	}
+		if( ts > 0 )
+		{
+		  DPRINTF(E_DEBUG, L_INOTIFY, "%s is newer than the last db entry.\n", path);
+		  inotify_remove_file(path);
+	   }
 	}
 
 	/* Find the parentID.  If it's not found, create all necessary parents. */
@@ -566,7 +569,7 @@ static void RemoveFromDB(const char * id)
                     " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", id);
        sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", id);
      }
-  
+
      free(path);
    }
 }
@@ -693,7 +696,7 @@ start_inotify()
 	int length, i = 0;
 	char * esc_name = NULL;
 	struct stat st;
-        
+
 	pollfds[0].fd = inotify_init();
 	pollfds[0].events = POLLIN;
 
@@ -711,7 +714,7 @@ start_inotify()
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce inotify thread priority\n");
 	sqlite3_release_memory(1<<31);
 	av_register_all();
-        
+
 	while( !quitting )
 	{
                 length = poll(pollfds, 1, timeout);
