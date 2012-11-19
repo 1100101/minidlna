@@ -45,6 +45,7 @@ daemonize(void)
 {
 	int pid;
 #ifndef USE_DAEMON
+#warning "daemonize"
 	int i;
 
 	switch(fork())
@@ -79,6 +80,7 @@ daemonize(void)
 		exit(0);
 	}
 #else
+#warning "sys daemon()!"
 	if( daemon(0, 0) < 0 )
 		perror("daemon()");
 	pid = getpid();

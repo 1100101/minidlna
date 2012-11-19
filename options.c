@@ -190,6 +190,10 @@ freeoptions(void)
 	while (media_path)
 	{
 		free(media_path->path);
+		if(media_path->vfolder)
+		{
+			free(media_path->vfolder);
+		}
 		last_path = media_path;
 		media_path = media_path->next;
 		free(last_path);

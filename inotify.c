@@ -33,6 +33,7 @@
 #include <poll.h>
 #ifdef HAVE_SYS_INOTIFY_H
 #include <sys/inotify.h>
+#warning "<sys/inotify.h>"
 #else
 #include "linux/inotify.h"
 #include "linux/inotify-syscalls.h"
@@ -65,6 +66,8 @@ struct watch
 static struct watch *watches;
 static struct watch *lastwatch = NULL;
 static time_t next_pl_fill = 0;
+
+static int IsMediaPath(const char * path);
 
 char *get_path_from_wd(int wd)
 {
@@ -160,9 +163,12 @@ inotify_create_watches(int fd)
 	sql_get_table(db, "SELECT PATH from DETAILS where MIME is NULL and PATH is not NULL", &result, &rows, NULL);
 	for( i=1; i <= rows; i++ )
 	{
+	  if(!IsMediaPath(result[i]))
+	  {
 		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
 		add_watch(fd, result[i]);
 		num_watches++;
+	}
 	}
 	sqlite3_free_table(result);
 		
@@ -366,9 +372,10 @@ inotify_insert_file(char * name, const char * path)
 	}
 	else if( ts < st.st_mtime )
 	{
-		if( ts > 0 )
+		if( ts > 0 ) {
 			DPRINTF(E_DEBUG, L_INOTIFY, "%s is newer than the last db entry.\n", path);
 		inotify_remove_file(path);
+	}
 	}
 
 	/* Find the parentID.  If it's not found, create all necessary parents. */
@@ -527,6 +534,43 @@ inotify_insert_directory(int fd, char *name, const char * path)
 	return 0;
 }
 
+static int
+IsMediaPath(const char * path)
+{
+  struct media_dir_s * current = media_dirs;
+  while(current != NULL)
+  {
+    if(strcmp(path, current->path) == 0)
+    {
+      return 1;
+    }
+    current = current->next;
+  }
+  return 0;
+}
+
+
+
+static void RemoveFromDB(const char * id)
+{
+   char * path = NULL;
+   path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = "
+                                        "(SELECT DETAIL_ID from OBJECTS WHERE OBJECT_ID = '%q')", id);
+   if(path)
+   {
+     DPRINTF(E_DEBUG, L_INOTIFY, "ParentPath: '%s'\n", path);
+     if(!IsMediaPath(path))
+     {
+       DPRINTF(E_DEBUG, L_INOTIFY, "%s is a not virtual folder, removing\n", path);
+       sql_exec(db, "DELETE from DETAILS where ID ="
+                    " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", id);
+       sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", id);
+     }
+  
+     free(path);
+   }
+}
+
 int
 inotify_remove_file(const char * path)
 {
@@ -581,18 +625,15 @@ inotify_remove_file(const char * path)
 					continue;
 				if( children < 2 )
 				{
-					sql_exec(db, "DELETE from DETAILS where ID ="
-					             " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", result[i]);
-					sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", result[i]);
-
+					RemoveFromDB(result[i]);
+					// If the file/folder we just removed was the last file/folder in the resp. parent folder,
+					// then remove the parent folder as well
 					ptr = strrchr(result[i], '$');
 					if( ptr )
 						*ptr = '\0';
 					if( sql_get_int_field(db, "SELECT count(*) from OBJECTS where PARENT_ID = '%s'", result[i]) == 0 )
 					{
-						sql_exec(db, "DELETE from DETAILS where ID ="
-						             " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", result[i]);
-						sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", result[i]);
+						RemoveFromDB(result[i]);
 					}
 				}
 			}

@@ -90,6 +90,7 @@ enum client_types {
 
 struct media_dir_s {
  	char *path;             /* base path */
+	char * vfolder;
  	media_types types;      /* types of files to scan */
  	struct media_dir_s *next;
 };

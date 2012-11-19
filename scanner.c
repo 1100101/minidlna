@@ -767,10 +767,26 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	}
 }
 
+char* GetParentID(struct media_dir_s * media_path) {
+  char * parent_id = NULL;
+  int startID;
+
+  if(media_path->vfolder != NULL) {
+    startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
+    insert_directory(media_path->vfolder, media_path->path, BROWSEDIR_ID, "", startID);
+    asprintf(&parent_id, "%s$%X", "", startID);
+    DPRINTF(E_DEBUG, L_SCANNER, _("[GetParentID] vfolder=%s, startID=%d, parent_id=%s\n"),
+            media_path->vfolder, startID, parent_id);
+  }
+
+  return parent_id;
+}
+
 void
 start_scanner()
 {
 	struct media_dir_s *media_path = media_dirs;
+	char *parent_id = NULL;
 	char name[MAXPATHLEN];
 
 	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
@@ -787,11 +803,16 @@ start_scanner()
 	av_log_set_level(AV_LOG_PANIC);
 	while( media_path )
 	{
+		parent_id = GetParentID(media_path);
 		strncpyt(name, media_path->path, sizeof(name));
 		GetFolderMetadata(basename(name), media_path->path, NULL, NULL, 0);
-		ScanDirectory(media_path->path, NULL, media_path->types);
+		ScanDirectory(media_path->path, parent_id, media_path->types);
 		sql_exec(db, "INSERT into SETTINGS values (%Q, %Q)", "media_dir", media_path->path);
 		media_path = media_path->next;
+		if(parent_id != NULL) {
+			free(parent_id);
+			parent_id = NULL;
+		}
 	}
 #ifdef READYNAS
 	if( access("/ramfs/.rescan_done", F_OK) == 0 )
