@@ -454,7 +454,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 				        dir, strerror(errno));
 		}
 	}
-	
+
 	pidfile = fopen(fname, "w");
 	if (!pidfile)
 	{
@@ -532,7 +532,7 @@ init(int argc, char **argv)
 	strncat(uuidvalue, mac_str, 12);
 
 	getfriendlyname(friendly_name, FRIENDLYNAME_MAX_LEN);
-	
+
 	runtime_vars.port = -1;
 	runtime_vars.notify_interval = 895;	/* seconds between SSDP announces */
 	runtime_vars.root_container = NULL;
@@ -588,7 +588,7 @@ init(int argc, char **argv)
 			break;
 		case UPNPSERIAL:
 			strncpyt(serialnumber, ary_options[i].value, SERIALNUMBER_MAX_LEN);
-			break;				
+			break;
 		case UPNPMODEL_NAME:
 			strncpyt(modelname, ary_options[i].value, MODELNAME_MAX_LEN);
 			break;
@@ -743,9 +743,28 @@ init(int argc, char **argv)
 				uid = entry->pw_uid;
 			}
 			break;
+      case SKIP_FOLDERS:
+			for (string = ary_options[i].value; (word = strtok(string, ",")); string = NULL)
+			{
+				struct folder_name_s * this_name = calloc(1, sizeof(struct folder_name_s));
+				this_name->name = strdup(word);
+				if (skip_folders)
+				{
+					struct folder_name_s * all_folders = skip_folders;
+					while( all_folders->next )
+					{
+						all_folders = all_folders->next;
+			      }
+					all_folders->next = this_name;
+				}
+				else
+				{
+					skip_folders = this_name;
+				}
+			}
+         break;
 		default:
-			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
-			        optionsfile);
+			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n", optionsfile);
 		}
 	}
 	if (log_path[0] == '\0')

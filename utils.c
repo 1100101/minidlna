@@ -161,7 +161,7 @@ strcasestrc(const char *s, const char *p, const char t)
 	}
 
 	return NULL;
-} 
+}
 
 char *
 modifyString(char * string, const char * before, const char * after)
@@ -421,6 +421,32 @@ is_album_art(const char * name)
 	}
 
 	return (album_art_name ? 1 : 0);
+}
+
+int
+is_skipped_folder(const char * name)
+{
+	struct folder_name_s * folder_name = NULL;
+	const char * folder;
+
+	if(name && *name)
+	{
+   	folder = strrchr(name, '/');
+	   if(folder != NULL)
+	   {
+	      folder +=1;
+	   }
+
+	   for( folder_name = skip_folders; folder_name != NULL; folder_name = folder_name->next )
+	   {
+   	   if( strcmp(folder_name->name, folder) == 0 )
+   	   {
+			   break;
+		   }
+	   }
+	}
+
+	return (folder_name ? 1 : 0);
 }
 
 int
