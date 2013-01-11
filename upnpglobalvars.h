@@ -231,9 +231,9 @@ extern char db_path[];
 extern char log_path[];
 extern struct media_dir_s * media_dirs;
 extern struct album_art_name_s * album_art_names;
+extern struct folder_name_s * skip_folders;
 extern struct client_cache_s clients[CLIENT_CACHE_SLOTS];
 extern short int scanning;
 extern volatile short int quitting;
 extern volatile uint32_t updateID;
-
 #endif

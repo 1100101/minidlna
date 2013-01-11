@@ -101,6 +101,11 @@ struct album_art_name_s {
 	struct album_art_name_s *next;
 };
 
+struct folder_name_s {
+   char *name;
+   struct folder_name_s *next;
+};
+
 struct client_cache_s {
 	struct in_addr addr;
 	unsigned char mac[6];

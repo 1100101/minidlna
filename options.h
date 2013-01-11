@@ -55,7 +55,8 @@ enum upnpconfigoptions {
 	ENABLE_TIVO,			/* enable support for streaming images and music to TiVo */
 	ENABLE_DLNA_STRICT,		/* strictly adhere to DLNA specs */
 	ROOT_CONTAINER,			/* root ObjectID (instead of "0") */
-	USER_ACCOUNT			/* user account to run as */
+	USER_ACCOUNT,			/* user account to run as */
+	SKIP_FOLDERS          /* list of folders to skip */
 };
 
 /* readoptionsfile()
@@ -64,7 +65,7 @@ enum upnpconfigoptions {
 int
 readoptionsfile(const char * fname);
 
-/* freeoptions() 
+/* freeoptions()
  * frees memory allocated to option values */
 void
 freeoptions(void);

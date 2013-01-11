@@ -687,6 +687,10 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	static long long unsigned int fileno = 0;
 	enum file_types type;
 
+	if(is_skipped_folder(dir)) {
+	   return;
+	}
+
 	DPRINTF(parent?E_INFO:E_WARN, L_SCANNER, _("Scanning %s\n"), dir);
 	switch( dir_types )
 	{

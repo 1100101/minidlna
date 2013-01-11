@@ -62,7 +62,8 @@ static const struct {
 	{ ENABLE_TIVO, "enable_tivo" },
 	{ ENABLE_DLNA_STRICT, "strict_dlna" },
 	{ ROOT_CONTAINER, "root_container" },
-	{ USER_ACCOUNT, "user" }
+	{ USER_ACCOUNT, "user" },
+	{ SKIP_FOLDERS, "skipfolders" }
 };
 
 int
@@ -99,7 +100,7 @@ readoptionsfile(const char * fname)
 	while(fgets(buffer, sizeof(buffer), hfile))
 	{
 		linenum++;
-		t = strchr(buffer, '\n'); 
+		t = strchr(buffer, '\n');
 		if(t)
 		{
 			*t = '\0';
@@ -110,7 +111,7 @@ readoptionsfile(const char * fname)
 				t--;
 			}
 		}
-       
+
 		/* skip leading whitespaces */
 		name = buffer;
 		while(isspace(*name))
@@ -174,9 +175,9 @@ readoptionsfile(const char * fname)
 		}
 
 	}
-	
+
 	fclose(hfile);
-	
+
 	return 0;
 }
 
@@ -185,7 +186,7 @@ freeoptions(void)
 {
 	struct media_dir_s *media_path, *last_path;
 	struct album_art_name_s *art_names, *last_name;
-	
+
 	media_path = media_dirs;
 	while (media_path)
 	{
