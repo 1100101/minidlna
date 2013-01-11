@@ -687,9 +687,6 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	static long long unsigned int fileno = 0;
 	enum file_types type;
 
-	if(is_skipped_folder(dir)) {
-	   return;
-	}
 
 	DPRINTF(parent?E_INFO:E_WARN, L_SCANNER, _("Scanning %s\n"), dir);
 	switch( dir_types )
@@ -750,7 +747,7 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 		{
 			type = resolve_unknown_type(full_path, dir_types);
 		}
-		if( (type == TYPE_DIR) && (access(full_path, R_OK|X_OK) == 0) )
+		if( (type == TYPE_DIR) && (access(full_path, R_OK|X_OK) == 0) && !is_skipped_folder(full_path) )
 		{
 			insert_directory(name, full_path, BROWSEDIR_ID, (parent ? parent:""), i+startID);
 			sprintf(parent_id, "%s$%X", (parent ? parent:""), i+startID);
