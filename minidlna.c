@@ -436,7 +436,7 @@ check_db(sqlite3 *db, int new_db, pid_t *scanner_pid)
 		media_path = media_dirs;
 		while (media_path)
 		{
-			ret = sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = %Q", media_path->path);
+			ret = sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = %Q AND TIMESTAMP != '' ", media_path->path);
 			if (ret != media_path->types)
 			{
 				ret = 1;
@@ -472,7 +472,7 @@ rescan:
 		if (ret < 0)
 			DPRINTF(E_WARN, L_GENERAL, "Creating new database at %s/files.db\n", db_path);
 		else if (ret == 1)
-			DPRINTF(E_WARN, L_GENERAL, "New media_dir detected; rescanning...\n");
+			DPRINTF(E_WARN, L_GENERAL, "New media_dir '%s' detected; rescanning...\n", media_path->path);
 		else if (ret == 2)
 			DPRINTF(E_WARN, L_GENERAL, "Removed media_dir detected; rescanning...\n");
 		else
