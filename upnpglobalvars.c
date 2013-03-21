@@ -90,7 +90,6 @@ char log_path[PATH_MAX] = {'\0'};
 struct media_dir_s * media_dirs = NULL;
 struct album_art_name_s * album_art_names = NULL;
 struct folder_name_s * skip_folders = NULL;
-struct client_cache_s clients[CLIENT_CACHE_SLOTS];
 short int scanning = 0;
 volatile short int quitting = 0;
 volatile uint32_t updateID = 0;

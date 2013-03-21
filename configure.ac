@@ -99,8 +99,7 @@ AC_COMPILE_IFELSE(
      ],
      [
          AC_MSG_RESULT([no])
-         AC_CHECK_LIB([rt], [clock_gettime], [LIBRT_LIBS="-lrt" AC_DEFINE([HAVE_LIBRT], [1], [use clock_gettime])],)
-         AC_SUBST(LIBRT_LIBS)
+         AC_SEARCH_LIBS([clock_gettime], [rt], [AC_DEFINE([HAVE_CLOCK_GETTIME], [1], [use clock_gettime])],)
      ])
 
 ################################################################################################################
@@ -517,6 +516,9 @@ case "$target_os" in
 		;;
         linux*)
 		;;
+        openbsd*)
+                OS_URL=http://www.openbsd.org/
+                ;;
         *)
                 echo "Unknown OS : $target_os"
                 ;;
