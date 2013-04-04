@@ -30,7 +30,8 @@
 #define __MINIDLNATYPES_H__
 
 #include "config.h"
-#include <netinet/in.h>
+#include "clients.h"
+//#include <netinet/in.h>
 #include <time.h>
 #include <fcntl.h>
 
@@ -49,8 +50,8 @@ struct runtime_vars_s {
 
 struct string_s {
 	char *data; // ptr to start of memory area
-	int off;
-	int size;
+	size_t off;
+	size_t size;
 };
 
 typedef uint8_t media_types;
@@ -64,28 +65,6 @@ enum file_types {
 	TYPE_UNKNOWN,
 	TYPE_DIR,
 	TYPE_FILE
-};
-
-enum client_types {
-	EXbox = 1,
-	EPS3,
-	ESamsungSeriesC,
-	EDenonReceiver,
-	EFreeBox,
-	EPopcornHour,
-	EMediaRoom,
-	ESonyBDP,
-	ESonyBravia,
-	ERokuSoundBridge,
-	EToshibaTV,
-	ELGDevice,
-	ENetgearEVA2000,
-	ESamsungSeriesA,
-	ESamsungSeriesB,
-	EMarantzDMP,
-	ELifeTab,
-	EDirecTV,
-	EStandardDLNA150 = 100
 };
 
 struct media_dir_s {
@@ -103,14 +82,6 @@ struct album_art_name_s {
 struct folder_name_s {
    char *name;
    struct folder_name_s *next;
-};
-
-struct client_cache_s {
-	struct in_addr addr;
-	unsigned char mac[6];
-	enum client_types type;
-	uint32_t flags;
-	time_t age;
 };
 
 #endif
