@@ -11,12 +11,14 @@ config.sub
 config.status
 config.log
 config.h
+config.h.in~
 confdefs.h
 conftest.*
 configure
 depcomp
 install-sh
 m4/
+minidlnad
 missing
 mkinstalldirs
 po/Makefile.in.in
