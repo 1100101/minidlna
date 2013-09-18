@@ -587,8 +587,7 @@ inotify_remove_file(const char * path)
 
 	if( ends_with(path, ".srt") )
 	{
-		rows = sql_exec(db, "DELETE from CAPTIONS where PATH = '%q'", path);
-		return rows;
+		return sql_exec(db, "DELETE from CAPTIONS where PATH = '%q'", path);
 	}
 	/* Invalidate the scanner cache so we don't insert files into non-existent containers */
 	valid_cache = 0;
@@ -610,11 +609,13 @@ inotify_remove_file(const char * path)
 	else
 	{
 		/* Delete the parent containers if we are about to empty them. */
-		snprintf(sql, sizeof(sql), "SELECT PARENT_ID from OBJECTS where DETAIL_ID = %lld", (long long int)detailID);
+		snprintf(sql, sizeof(sql), "SELECT PARENT_ID from OBJECTS where DETAIL_ID = %lld"
+		                           " and PARENT_ID not like '64$%%'",
+		                           (long long int)detailID);
 		if( (sql_get_table(db, sql, &result, &rows, NULL) == SQLITE_OK) )
 		{
 			int i, children;
-			for( i=1; i <= rows; i++ )
+			for( i = 1; i <= rows; i++ )
 			{
 				/* If it's a playlist item, adjust the item count of the playlist */
 				if( strncmp(result[i], MUSIC_PLIST_ID, strlen(MUSIC_PLIST_ID)) == 0 )
