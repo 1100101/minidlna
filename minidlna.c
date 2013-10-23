@@ -161,7 +161,7 @@ sighup(int sig)
 	signal(sig, sighup);
 	DPRINTF(E_WARN, L_GENERAL, "received signal %d, re-read\n", sig);
 
-	reload_ifaces();
+	reload_ifaces(1);
 }
 
 /* record the startup time */
@@ -972,7 +972,7 @@ init(int argc, char **argv)
 	}	
 
 	set_startup_time();
-	reload_ifaces();
+	reload_ifaces(0);
 
 	/* presentation url */
 	if (presurl)
