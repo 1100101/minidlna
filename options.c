@@ -62,7 +62,8 @@ static const struct {
 	{ ENABLE_DLNA_STRICT, "strict_dlna" },
 	{ ROOT_CONTAINER, "root_container" },
 	{ USER_ACCOUNT, "user" },
-	{ SKIP_FOLDERS, "skipfolders" }
+	{ SKIP_FOLDERS, "skipfolders" },
+	{ FORCE_SORT_CRITERIA, "force_sort_criteria" }
 };
 
 int
