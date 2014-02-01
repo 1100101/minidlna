@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <locale.h>
 #include <libgen.h>
+#include <assert.h>
 #include <inttypes.h>
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -382,7 +383,7 @@ insert_containers(const char *name, const char *path, const char *refID, const c
 	valid_cache = 1;
 }
 
-int
+int64_t
 insert_directory(const char *name, const char *path, const char *base, const char *parentID, int objectID)
 {
 	int64_t detailID = 0;
@@ -440,7 +441,8 @@ insert_directory(const char *name, const char *path, const char *base, const cha
 	             "VALUES"
 	             " ('%s%s$%X', '%s%s', %lld, '%s', '%q')",
 	             base, parentID, objectID, base, parentID, detailID, class, name);
-	return 0;
+
+	return detailID;
 }
 
 int
@@ -688,7 +690,7 @@ filter_avp(scan_filter *d)
 	       );
 }
 
-void
+static void
 ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 {
 	struct dirent **namelist;
@@ -795,31 +797,59 @@ char* GetParentID(struct media_dir_s * media_path) {
   return parent_id;
 }
 
-void
-start_scanner()
+static void
+_notify_start(void)
 {
-	struct media_dir_s *media_path = media_dirs;
-	char *parent_id = NULL;
-	char name[MAXPATHLEN];
-
-	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
-		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
-
 #ifdef READYNAS
 	FILE *flag = fopen("/ramfs/.upnp-av_scan", "w");
 	if( flag )
 		fclose(flag);
 #endif
+}
+
+static void
+_notify_stop(void)
+{
+#ifdef READYNAS
+	if( access("/ramfs/.rescan_done", F_OK) == 0 )
+		system("/bin/sh /ramfs/.rescan_done");
+	unlink("/ramfs/.upnp-av_scan");
+#endif
+}
+
+void
+start_scanner()
+{
+	struct media_dir_s *media_path;
+	char path[MAXPATHLEN];
+	char *parent_id = NULL;
+
+	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
+		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
+	_notify_start();
+
 	setlocale(LC_COLLATE, "");
 
 	av_register_all();
 	av_log_set_level(AV_LOG_PANIC);
-	while( media_path )
+	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
 		int64_t id;
 		parent_id = GetParentID(media_path);
-		strncpyt(name, media_path->path, sizeof(name));
-		id = GetFolderMetadata(basename(name), media_path->path, NULL, NULL, 0);
+		char *bname = NULL;
+		strncpyt(path, media_path->path, sizeof(path));
+		bname = basename(path);
+		/* If there are multiple media locations, add a level to the ContentDirectory */
+		if( media_dirs && media_dirs->next )
+		{
+			int startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
+			id = insert_directory(bname, path, BROWSEDIR_ID, "", startID);
+         assert(parent_id == NULL && "parent_id != NULL");
+			asprintf(&parent_id, "$%X", startID);
+			
+		}
+		else
+			id = GetFolderMetadata(bname, media_path->path, NULL, NULL, 0);
 		/* Use TIMESTAMP to store the media type */
 		sql_exec(db, "UPDATE DETAILS set TIMESTAMP = %d where ID = %lld", media_path->types, (long long)id);
 		ScanDirectory(media_path->path, parent_id, media_path->types);
@@ -830,11 +860,7 @@ start_scanner()
 			parent_id = NULL;
 		}
 	}
-#ifdef READYNAS
-	if( access("/ramfs/.rescan_done", F_OK) == 0 )
-		system("/bin/sh /ramfs/.rescan_done");
-	unlink("/ramfs/.upnp-av_scan");
-#endif
+	_notify_stop();
 	/* Create this index after scanning, so it doesn't slow down the scanning process.
 	 * This index is very useful for large libraries used with an XBox360 (or any
 	 * client that uses UPnPSearch on large containers). */
