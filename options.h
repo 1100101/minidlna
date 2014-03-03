@@ -57,7 +57,8 @@ enum upnpconfigoptions {
 	ROOT_CONTAINER,			/* root ObjectID (instead of "0") */
 	USER_ACCOUNT,			/* user account to run as */
 	SKIP_FOLDERS,          /* list of folders to skip */
-	FORCE_SORT_CRITERIA		/* force sorting by a given sort criteria */
+	FORCE_SORT_CRITERIA,		/* force sorting by a given sort criteria */
+	MAX_CONNECTIONS			/* maximum number of simultaneous connections */
 };
 
 /* readoptionsfile()
