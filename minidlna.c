@@ -510,7 +510,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 				fname);
 			return -1;
 		}
-		if (uid >= 0)
+		if (uid > 0)
 		{
 			if (chown(dir, uid, -1) != 0)
 				DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile ownership: %s\n",
@@ -532,7 +532,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 			"Unable to write to pidfile %s: %s\n", fname);
 		ret = -1;
 	}
-	if (uid >= 0)
+	if (uid > 0)
 	{
 		if (fchown(fileno(pidfile), uid, -1) != 0)
 			DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile ownership: %s\n",
@@ -573,7 +573,7 @@ init(int argc, char **argv)
 	struct media_dir_s *media_dir;
 	int ifaces = 0;
 	media_types types;
-	uid_t uid = -1;
+	uid_t uid = 0;
 
 	/* first check if "-f" option is used */
 	for (i=2; i<argc; i++)
@@ -747,7 +747,7 @@ init(int argc, char **argv)
 			strcpy(uuidvalue+5, ary_options[i].value);
 			break;
 		case USER_ACCOUNT:
-			uid = strtol(ary_options[i].value, &string, 0);
+			uid = strtoul(ary_options[i].value, &string, 0);
 			if (*string)
 			{
 				/* Symbolic username given, not UID. */
@@ -891,7 +891,7 @@ init(int argc, char **argv)
 			if (i+1 != argc)
 			{
 				i++;
-				uid = strtol(argv[i], &string, 0);
+				uid = strtoul(argv[i], &string, 0);
 				if (*string)
 				{
 					/* Symbolic username given, not UID. */
@@ -1016,7 +1016,7 @@ init(int argc, char **argv)
 	if (writepidfile(pidfilename, pid, uid) != 0)
 		pidfilename = NULL;
 
-	if (uid >= 0)
+	if (uid > 0)
 	{
 		struct stat st;
 		if (stat(db_path, &st) == 0 && st.st_uid != uid && chown(db_path, uid, -1) != 0)
@@ -1024,7 +1024,7 @@ init(int argc, char **argv)
 				db_path, uid, strerror(errno));
 	}
 
-	if (uid != -1 && setuid(uid) == -1)
+	if (uid > 0 && setuid(uid) == -1)
 		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
 			uid, strerror(errno));
 
