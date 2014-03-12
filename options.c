@@ -64,7 +64,8 @@ static const struct {
 	{ USER_ACCOUNT, "user" },
 	{ SKIP_FOLDERS, "skipfolders" },
 	{ FORCE_SORT_CRITERIA, "force_sort_criteria" },
-	{ MAX_CONNECTIONS, "max_connections" }
+	{ MAX_CONNECTIONS, "max_connections" },
+	{ MERGE_MEDIA_DIRS, "merge_media_dirs" }
 };
 
 int

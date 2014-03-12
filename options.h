@@ -58,7 +58,8 @@ enum upnpconfigoptions {
 	USER_ACCOUNT,			/* user account to run as */
 	SKIP_FOLDERS,          /* list of folders to skip */
 	FORCE_SORT_CRITERIA,		/* force sorting by a given sort criteria */
-	MAX_CONNECTIONS			/* maximum number of simultaneous connections */
+	MAX_CONNECTIONS,		/* maximum number of simultaneous connections */
+	MERGE_MEDIA_DIRS		/* don't add an extra directory level when there are multiple media dirs */
 };
 
 /* readoptionsfile()
