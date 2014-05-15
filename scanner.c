@@ -605,10 +605,14 @@ filter_hidden(scan_filter *d)
 static int
 filter_type(scan_filter *d)
 {
+#if HAVE_STRUCT_DIRENT_D_TYPE
 	return ( (d->d_type == DT_DIR) ||
 	         (d->d_type == DT_LNK) ||
 	         (d->d_type == DT_UNKNOWN)
 	       );
+#else
+	return 1;
+#endif
 }
 
 static int
@@ -616,7 +620,7 @@ filter_a(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  ((d->d_type == DT_REG) &&
+		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 	            is_playlist(d->d_name))))
 	       );
@@ -627,7 +631,7 @@ filter_av(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  ((d->d_type == DT_REG) &&
+		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 		    is_video(d->d_name) ||
 	            is_playlist(d->d_name))))
@@ -639,7 +643,7 @@ filter_ap(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  ((d->d_type == DT_REG) &&
+		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 		    is_image(d->d_name) ||
 	            is_playlist(d->d_name))))
@@ -651,7 +655,7 @@ filter_v(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  (d->d_type == DT_REG &&
+		  (is_reg(d) &&
 	           is_video(d->d_name)))
 	       );
 }
@@ -661,7 +665,7 @@ filter_vp(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  ((d->d_type == DT_REG) &&
+		  (is_reg(d) &&
 		   (is_video(d->d_name) ||
 	            is_image(d->d_name))))
 	       );
@@ -672,7 +676,7 @@ filter_p(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  (d->d_type == DT_REG &&
+		  (is_reg(d) &&
 		   is_image(d->d_name)))
 	       );
 }
@@ -682,7 +686,7 @@ filter_avp(scan_filter *d)
 {
 	return ( filter_hidden(d) &&
 	         (filter_type(d) ||
-		  ((d->d_type == DT_REG) &&
+		  (is_reg(d) &&
 		   (is_audio(d->d_name) ||
 		    is_image(d->d_name) ||
 		    is_video(d->d_name) ||
@@ -756,11 +760,11 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 		type = TYPE_UNKNOWN;
 		snprintf(full_path, PATH_MAX, "%s/%s", dir, namelist[i]->d_name);
 		name = escape_tag(namelist[i]->d_name, 1);
-		if( namelist[i]->d_type == DT_DIR )
+		if( is_dir(namelist[i]) == 1 )
 		{
 			type = TYPE_DIR;
 		}
-		else if( namelist[i]->d_type == DT_REG )
+		else if( is_reg(namelist[i]) == 1 )
 		{
 			type = TYPE_FILE;
 		}
