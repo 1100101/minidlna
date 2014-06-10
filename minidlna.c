@@ -461,7 +461,7 @@ rescan:
 #if USE_FORK
 		scanning = 1;
 		sqlite3_close(db);
-		*scanner_pid = process_fork();
+		*scanner_pid = fork();
 		open_db(&db);
 		if (*scanner_pid == 0) /* child (scanner) process */
 		{
@@ -1042,6 +1042,13 @@ init(int argc, char **argv)
 		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
 			uid, strerror(errno));
 
+	children = calloc(runtime_vars.max_connections, sizeof(struct child));
+	if (!children)
+	{
+		DPRINTF(E_ERROR, L_GENERAL, "Allocation failed\n");
+		return 1;
+	}	
+
 	return 0;
 }
 
@@ -1358,7 +1365,10 @@ main(int argc, char **argv)
 shutdown:
 	/* kill the scanner */
 	if (scanning && scanner_pid)
-		kill(scanner_pid, 9);
+		kill(scanner_pid, SIGKILL);
+
+	/* kill other child processes */
+	process_reap_children();
 
 	/* close out open sockets */
 	while (upnphttphead.lh_first != NULL)
