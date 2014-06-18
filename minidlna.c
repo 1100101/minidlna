@@ -1369,6 +1369,7 @@ shutdown:
 
 	/* kill other child processes */
 	process_reap_children();
+	free(children);
 
 	/* close out open sockets */
 	while (upnphttphead.lh_first != NULL)
