@@ -775,7 +775,7 @@ start_inotify()
 						if( (event->mask & IN_MOVED_TO) ||
 						    (sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = '%q'", path_buf) != st.st_mtime) )
 						{
-							DPRINTF(E_DEBUG, L_INOTIFY, "The file %s was %s.\n",
+							DPRINTF(E_INFO, L_INOTIFY, "The file %s was %s.\n",
 								path_buf, (event->mask & IN_MOVED_TO ? "moved here" : "changed"));
 							inotify_insert_file(esc_name, path_buf);
 						}
@@ -783,7 +783,7 @@ start_inotify()
 				}
 				else if ( event->mask & (IN_DELETE|IN_MOVED_FROM) )
 				{
-					DPRINTF(E_DEBUG, L_INOTIFY, "The %s %s was %s.\n",
+					DPRINTF(E_INFO, L_INOTIFY, "The %s %s was %s.\n",
 						(event->mask & IN_ISDIR ? "directory" : "file"),
 						path_buf, (event->mask & IN_MOVED_FROM ? "moved away" : "deleted"));
 					if ( event->mask & IN_ISDIR )
