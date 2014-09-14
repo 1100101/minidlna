@@ -69,6 +69,10 @@ static const struct {
 	{ MERGE_MEDIA_DIRS, "merge_media_dirs" },
 	{ WIDE_LINKS, "wide_links" },
 	{ TIVO_DISCOVERY, "tivo_discovery" },
+#ifdef ENABLE_VIDEO_THUMB
+	{ ENABLE_THUMB, "enable_thumbnail" },
+	{ THUMB_WIDTH, "thumbnail_width" },
+#endif
 };
 
 int

@@ -62,6 +62,10 @@ enum upnpconfigoptions {
 	MERGE_MEDIA_DIRS,		/* don't add an extra directory level when there are multiple media dirs */
 	WIDE_LINKS,			/* allow following symlinks outside the defined media_dirs */
 	TIVO_DISCOVERY,			/* TiVo discovery protocol: bonjour or beacon. Defaults to bonjour if supported */
+#ifdef ENABLE_VIDEO_THUMB
+	ENABLE_THUMB,			/* enable thumbnail generation */
+	THUMB_WIDTH,			/* thunbnail image with */
+#endif
 };
 
 /* readoptionsfile()

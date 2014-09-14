@@ -193,6 +193,9 @@ extern uint32_t runtime_flags;
 #else
 #define TIVO_BONJOUR_MASK     0x0000
 #endif
+#ifdef ENABLE_VIDEO_THUMB
+#define THUMB_MASK            0x0100
+#endif
 
 #define SETFLAG(mask)	runtime_flags |= mask
 #define GETFLAG(mask)	(runtime_flags & mask)

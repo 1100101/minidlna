@@ -619,6 +619,10 @@ init(int argc, char **argv)
 	runtime_vars.root_container = NULL;
 	runtime_vars.ifaces[0] = NULL;
 
+#ifdef ENABLE_VIDEO_THUMB
+	runtime_vars.thumb_width = 160;
+#endif
+
 	/* read options file first since
 	 * command line arguments have final say */
 	if (readoptionsfile(optionsfile) < 0)
@@ -807,6 +811,15 @@ init(int argc, char **argv)
 			if (strcasecmp(ary_options[i].value, "beacon") == 0)
 				CLEARFLAG(TIVO_BONJOUR_MASK);
 			break;
+#ifdef ENABLE_VIDEO_THUMB
+		case ENABLE_THUMB:
+			if( (strcmp(ary_options[i].value, "yes") == 0) || atoi(ary_options[i].value) )
+				SETFLAG(THUMB_MASK);
+			break;
+		case THUMB_WIDTH:
+			runtime_vars.thumb_width = atoi(ary_options[i].value);
+			break;
+#endif
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
 				optionsfile);
