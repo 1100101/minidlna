@@ -254,28 +254,6 @@ inotify_remove_watches(int fd)
 }
 #endif
 
-void art_cache_cleanup(const char* path) {
-	char* cache_file = NULL;
-
-#ifdef ENABLE_VIDEO_THUMB
-	/* Remove video thumbnails */
-	if(art_cache_path(".jpg", path, &cache_file))
-	{
-		if(!remove(cache_file))
-			DPRINTF(E_DEBUG, L_INOTIFY, "Removed video thumbnail (%s).\n", cache_file);
-		free(cache_file);
-	}
-#endif
-
-	if(art_cache_path(".mta", path, &cache_file))
-	{
-		sql_exec(db, "DELETE from MTA where PATH = '%q'", cache_file);
-		if(!remove(cache_file))
-			DPRINTF(E_DEBUG, L_INOTIFY, "Removed MTA data (%s).\n", cache_file);
-		free(cache_file);
-	}
-}
-
 int
 monitor_remove_file(const char * path)
 {

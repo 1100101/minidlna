@@ -70,6 +70,7 @@
 #include "minidlnapath.h"
 #include "upnpsoap.h"
 #include "upnpevents.h"
+#include "albumart.h"
 #include "utils.h"
 #include "getifaddr.h"
 #include "image_utils.h"
@@ -1686,13 +1687,12 @@ SendResp_icon(struct upnphttp * h, char * icon)
 }
 
 static void
-SendResp_albumArt(struct upnphttp * h, char * object)
+SendResp_albumArt(struct upnphttp * h, char * url)
 {
 	char header[512];
-	char *path;
+	char *path, *albumart_path;
+	char *tmode;
 	off_t size;
-	long long id;
-	int fd;
 	struct string_s str;
 
 	if( h->reqflags & (FLAG_XFERSTREAMING|FLAG_RANGE) )
@@ -1702,36 +1702,68 @@ SendResp_albumArt(struct upnphttp * h, char * object)
 		return;
 	}
 
-	id = strtoll(object, NULL, 10);
+	long long id = strtoll(url, NULL, 10);
 
-	path = sql_get_text_field(db, "SELECT PATH from ALBUM_ART where ID = '%lld'", id);
+	path = sql_get_text_field(db, "SELECT PATH from ALBUM_ART where ID  = '%lld'", id);
 	if( !path )
 	{
-		DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s not found, responding ERROR 404\n", object);
+		DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s not found, responding ERROR 404\n", url);
 		Send404(h);
 		return;
 	}
-	DPRINTF(E_INFO, L_HTTP, "Serving album art ID: %lld [%s]\n", id, path);
 
-	fd = _open_file(path);
-	if( fd < 0 ) {
-		sqlite3_free(path);
-		if (fd == -403)
+#if USE_FORK
+	pid_t newpid = -1;
+#endif /* USE_FORK */
+
+	long long size_type = strtoll(strchr(url, '-') + 1, NULL, 10);
+	const image_size_type_t *image_size_type = get_image_size_type((image_size_type_enum)size_type);
+	art_cache_path(image_size_type, ".jpg", path, &albumart_path);
+
+	int fd = _open_file(albumart_path);
+	if (fd < 0) {
+		if (fd == -403) {
 			Send403(h);
-		else
-			Send404(h);
-		return;
+			goto albumart_error;
+		}
+		DPRINTF(E_DEBUG, L_HTTP, "Album art doesn't exist in cache, adding new entry %s\n", albumart_path);
+		save_resized_album_art_to(path, albumart_path, image_size_type);
+
+#if USE_FORK
+		// XXX: Don't we need to wait a bit here??
+		newpid = process_fork(h->req_client);
+		if (newpid > 0)
+		{
+			CloseSocket_upnphttp(h);
+			goto albumart_error;
+		}
+#endif
+		fd = open(albumart_path, O_RDONLY);
 	}
-	sqlite3_free(path);
+
+	if( fd < 0 ) {
+		DPRINTF(E_ERROR, L_HTTP, "Error opening %s\n", albumart_path);
+		Send404(h);
+		goto albumart_error;
+	}
+
+	DPRINTF(E_INFO, L_HTTP, "Serving album art ID: %lld [%s]\n", id, albumart_path);
+
 	size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
 
 	INIT_STR(str, header);
 
-	start_dlna_header(&str, 200, "Interactive", "image/jpeg");
+#if USE_FORK
+	if (newpid == 0 && (h->reqflags & FLAG_XFERBACKGROUND) && (setpriority(PRIO_PROCESS, 0, 19) == 0))
+		tmode = "Background";
+	else
+#endif
+	tmode = "Interactive";
+	start_dlna_header(&str, 200, tmode, "image/jpeg");
 	strcatf(&str, "Content-Length: %jd\r\n"
-	              "contentFeatures.dlna.org: DLNA.ORG_PN=JPEG_TN\r\n\r\n",
-	              (intmax_t)size);
+	              "contentFeatures.dlna.org: DLNA.ORG_PN=%s\r\n\r\n",
+	              (intmax_t)size, image_size_type->name);
 
 	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )
 	{
@@ -1739,7 +1771,14 @@ SendResp_albumArt(struct upnphttp * h, char * object)
 			send_file(h, fd, 0, size-1);
 	}
 	close(fd);
-	CloseSocket_upnphttp(h);
+
+albumart_error:
+	sqlite3_free(path);
+	free(albumart_path);
+#if USE_FORK
+	if (newpid == 0)
+		_exit(0);
+#endif
 }
 
 static void

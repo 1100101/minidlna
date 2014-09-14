@@ -446,7 +446,7 @@ video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack
 
 	start = clock();
 
-	if(art_cache_exists(".mta", moviefname, &mta_path))
+	if(art_cache_exists(NULL, ".mta", moviefname, &mta_path))
 	{
 		DPRINTF(E_INFO, L_METADATA, "The MTA file (%s) already exists.", mta_path);
 		return mta_path;

@@ -797,6 +797,12 @@ object_exists(const char *object)
 #define IS_ZERO(x) (!x || !atoi(x))
 
 static int
+append_with_attributes(struct string_s *str, const char *attribute, const char *value, const char *elementName)
+{
+	return strcatf(str, "&lt;%s %.512s&gt;%.512s&lt;/%s&gt;", elementName, attribute, value, elementName);
+}
+
+static int
 callback(void *args, int argc, char **argv, char **azColName)
 {
 	struct Response *passed_args = (struct Response *)args;
@@ -1140,17 +1146,26 @@ callback(void *args, int argc, char **argv, char **azColName)
 		{
 			/* Video and audio album art is handled differently */
 			if( *mime == 'v' && (passed_args->filter & FILTER_RES) && !(passed_args->flags & FLAG_MS_PFS) ) {
-				ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_TN\"&gt;"
-				                   "%s/AlbumArt/%s-%s.jpg"
-				                   "&lt;/res&gt;",
-				                   host, album_art, detailID);
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 0);
+				append_with_attributes(str, "protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_TN\"", dlna_buf, "res");
+				append_with_attributes(str, "dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 1);
+				append_with_attributes(str, "protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_SM\"", dlna_buf, "res");
+				append_with_attributes(str, "dlna:profileID=\"JPEG_SM\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 2);
+				append_with_attributes(str, "protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_MED\"", dlna_buf, "res");
+				append_with_attributes(str, "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
 			} else if( passed_args->filter & FILTER_UPNP_ALBUMARTURI ) {
-				ret = strcatf(str, "&lt;upnp:albumArtURI");
-				if( passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID ) {
-					ret = strcatf(str, " dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"");
-				}
-				ret = strcatf(str, "&gt;%s/AlbumArt/%s-%s.jpg&lt;/upnp:albumArtURI&gt;",
-				                   host, album_art, detailID);
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 0);
+				append_with_attributes(str, "dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 1);
+				append_with_attributes(str, "dlna:profileID=\"JPEG_SM\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 2);
+				append_with_attributes(str, "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
 			}
 		}
 		if( (passed_args->flags & FLAG_MS_PFS) && *mime == 'i' ) {
@@ -1205,13 +1220,18 @@ callback(void *args, int argc, char **argv, char **azColName)
 		if( artist && (passed_args->filter & FILTER_UPNP_ARTIST) ) {
 			ret = strcatf(str, "&lt;upnp:artist&gt;%s&lt;/upnp:artist&gt;", artist);
 		}
-		if( NON_ZERO(album_art) && (passed_args->filter & FILTER_UPNP_ALBUMARTURI) ) {
-			ret = strcatf(str, "&lt;upnp:albumArtURI ");
-			if( passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID ) {
-				ret = strcatf(str, "dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"");
-			}
-			ret = strcatf(str, "&gt;%s/AlbumArt/%s-%s.jpg&lt;/upnp:albumArtURI&gt;",
-			                   host, album_art, detailID);
+		if( NON_ZERO(album_art) && (passed_args->filter & FILTER_UPNP_ALBUMARTURI)) {
+			char *attribute = (passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID) ? "dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"" : "";
+			snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 0);
+			append_with_attributes(str, attribute, dlna_buf, "upnp:albumArtURI");
+
+			attribute = (passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID) ? "dlna:profileID=\"JPEG_SM\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"" : "";
+			snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 1);
+			append_with_attributes(str, attribute, dlna_buf, "upnp:albumArtURI");
+
+			attribute = (passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID) ? "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"" : "";
+			snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, album_art, 2);
+			append_with_attributes(str, attribute, dlna_buf, "upnp:albumArtURI");
 		}
 		if( passed_args->filter & FILTER_AV_MEDIA_CLASS ) {
 			char class;
