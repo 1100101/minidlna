@@ -208,7 +208,7 @@ image_free(image_s *pimage)
 }
 
 pix
-get_pix(image_s *pimage, int32_t x, int32_t y)
+get_pix(const image_s *pimage, int32_t x, int32_t y)
 {
 	if (x < 0)
 		x = 0;
@@ -574,7 +574,7 @@ image_new_from_jpeg(const char *path, int is_file, const uint8_t *buf, int size,
 }
 
 void
-image_upsize(image_s * pdest, image_s * psrc, int32_t width, int32_t height)
+image_upsize(image_s * pdest, const image_s * psrc, int32_t width, int32_t height)
 {
 	int32_t vx, vy;
 #if !defined __i386__ && !defined __x86_64__
@@ -637,7 +637,7 @@ image_upsize(image_s * pdest, image_s * psrc, int32_t width, int32_t height)
 }
 
 void
-image_downsize(image_s * pdest, image_s * psrc, int32_t width, int32_t height)
+image_downsize(image_s * pdest, const image_s * psrc, int32_t width, int32_t height)
 {
 	int32_t vx, vy;
 	pix vcol;
@@ -781,13 +781,17 @@ image_downsize(image_s * pdest, image_s * psrc, int32_t width, int32_t height)
 }
 
 image_s *
-image_resize(image_s * src_image, int32_t width, int32_t height)
+image_resize(const image_s *src_image, int32_t width, int32_t height)
 {
 	image_s * dst_image;
+
+	if ((src_image->width == width) && (src_image->height == height))
+		return (image_s*)src_image;
 
 	dst_image = image_new(width, height);
 	if( !dst_image )
 		return NULL;
+
 	if( (src_image->width < width) || (src_image->height < height) )
 		image_upsize(dst_image, src_image, width, height);
 	else
@@ -798,7 +802,7 @@ image_resize(image_s * src_image, int32_t width, int32_t height)
 
 
 unsigned char *
-image_save_to_jpeg_buf(image_s * pimage, int * size)
+image_save_to_jpeg_buf(const image_s * pimage, int * size)
 {
 	struct jpeg_compress_struct cinfo;
 	struct jpeg_error_mgr jerr;
@@ -848,7 +852,7 @@ image_save_to_jpeg_buf(image_s * pimage, int * size)
 }
 
 char *
-image_save_to_jpeg_file(image_s * pimage, char * path)
+image_save_to_jpeg_file(const image_s * pimage, const char * path)
 {
 	int nwritten, size = 0;
 	unsigned char * buf;
@@ -867,5 +871,5 @@ image_save_to_jpeg_file(image_s * pimage, char * path)
 	fclose(dst_file);
 	free(buf);
 
-	return (nwritten == size) ? path : NULL;
+	return (nwritten == size) ? (char*)path : NULL;
 }
