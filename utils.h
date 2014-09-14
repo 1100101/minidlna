@@ -99,5 +99,8 @@ const char *mime_to_ext(const char * mime);
 int make_dir(char * path, mode_t mode);
 unsigned int DJBHash(uint8_t *data, int len);
 extern const char* subtitle_formats[];
+#ifdef ENABLE_VIDEO_THUMB
+int rename_artcache_dir(const char * oldpath, const char * newpath);
+#endif
 
 #endif
