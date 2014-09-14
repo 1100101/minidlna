@@ -27,7 +27,7 @@ minidlnad_SOURCES = minidlna.c upnphttp.c upnpdescgen.c upnpsoap.c \
 			options.c minissdp.c uuid.c upnpevents.c \
 			sql.c utils.c metadata.c scanner.c monitor.c \
 			tivo_utils.c tivo_beacon.c tivo_commands.c \
-			playlist.c image_utils.c albumart.c log.c \
+			playlist.c image_utils.c albumart.c log.c video_thumb.c \
 			containers.c avahi.c tagutils/tagutils.c
 
 if HAVE_VORBISFILE
@@ -48,8 +48,10 @@ minidlnad_LDADD = \
 	@LIBJPEG_LIBS@ \
 	@LIBID3TAG_LIBS@ \
 	@LIBSQLITE3_LIBS@ \
-	@LIBAVFORMAT_LIBS@ \
 	@LIBAVUTIL_LIBS@ \
+	@LIBAVCODEC_LIBS@ \
+	@LIBAVFORMAT_LIBS@ \
+	@LIBSWSCALE_LIBS@ \
 	@LIBEXIF_LIBS@ \
 	@LIBINTL@ \
 	@LIBICONV@ \
