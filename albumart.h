@@ -48,5 +48,6 @@ int art_cache_exists(const image_size_type_t *image_size_type, const char* postf
 int art_cache_rename(const char * oldpath, const char * newpath);
 void art_cache_cleanup(const char* path);
 char *save_resized_album_art_to(const char *src_file, const char *dst_file, const image_size_type_t *image_size_type);
+int save_resized_album_art_from_file_to_file(const char *path, const char *dst, const image_size_type_t *image_size_type);
 
 #endif

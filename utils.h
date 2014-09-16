@@ -100,5 +100,7 @@ int make_dir(char * path, mode_t mode);
 char *base64_encode(const unsigned char *data, size_t ilen, size_t *olen);
 unsigned int DJBHash(const uint8_t *data, int len);
 extern const char* subtitle_formats[];
+int copy_file(const char *src_file, const char *dst_file);
+int link_file(const char *src_file, const char *dst_file);
 
 #endif

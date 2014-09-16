@@ -1727,8 +1727,6 @@ SendResp_albumArt(struct upnphttp * h, char * url)
 			goto albumart_error;
 		}
 		DPRINTF(E_DEBUG, L_HTTP, "Album art doesn't exist in cache, adding new entry %s\n", albumart_path);
-		save_resized_album_art_to(path, albumart_path, image_size_type);
-
 #if USE_FORK
 		// XXX: Don't we need to wait a bit here??
 		newpid = process_fork(h->req_client);
@@ -1738,6 +1736,14 @@ SendResp_albumArt(struct upnphttp * h, char * url)
 			goto albumart_error;
 		}
 #endif
+		int ret = save_resized_album_art_from_file_to_file(path, albumart_path, image_size_type);
+		if (ret != 0)
+		{
+			DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s not found, responding ERROR 404\n", url, image_size_type->name);
+			Send404(h);
+			goto albumart_error;
+		}
+
 		fd = open(albumart_path, O_RDONLY);
 	}
 
