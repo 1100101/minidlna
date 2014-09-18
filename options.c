@@ -73,6 +73,7 @@ static const struct {
 	{ ENABLE_THUMB, "enable_thumbnail" },
 	{ THUMB_WIDTH, "thumbnail_width" },
 #endif
+	{ ENABLE_MTA, "enable_mta" },
 };
 
 int
