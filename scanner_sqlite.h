@@ -53,6 +53,7 @@ char create_detailTable_sqlite[] = "CREATE TABLE DETAILS ("
 					"RESOLUTION TEXT, "
 					"THUMBNAIL BOOL DEFAULT 0, "
 					"ALBUM_ART INTEGER DEFAULT 0, "
+					"MTA INTEGER DEFAULT 0, "
 					"ROTATION INTEGER, "
 					"DLNA_PN TEXT, "
 					"MIME TEXT"
@@ -72,6 +73,11 @@ char create_bookmarkTable_sqlite[] = "CREATE TABLE BOOKMARKS ("
 					"ID INTEGER PRIMARY KEY, "
 					"SEC INTEGER, "
 					"WATCH_COUNT INTEGER"
+					");";
+
+char create_MTATable_sqlite[] = "CREATE TABLE MTA ("
+					"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+					"PATH TEXT NOT NULL"
 					");";
 
 char create_playlistTable_sqlite[] = "CREATE TABLE PLAYLISTS ("
