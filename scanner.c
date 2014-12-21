@@ -22,7 +22,6 @@
 #include <dirent.h>
 #include <locale.h>
 #include <libgen.h>
-#include <assert.h>
 #include <inttypes.h>
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -874,21 +873,20 @@ start_scanner()
 		strncpyt(path, media_path->path, sizeof(path));
 		bname = basename(path);
 		/* If there are multiple media locations, add a level to the ContentDirectory */
-		if( !GETFLAG(MERGE_MEDIA_DIRS_MASK) && media_dirs->next )
+		if( !GETFLAG(MERGE_MEDIA_DIRS_MASK) && media_dirs->next && !parent_id )
 		{
 			int startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
 			id = insert_directory(bname, path, BROWSEDIR_ID, "", startID);
-         assert(parent_id == NULL && "parent_id != NULL");
 			asprintf(&parent_id, "$%X", startID);
 			
 		}
 		else
 			id = GetFolderMetadata(bname, media_path->path, NULL, NULL, 0);
-		/* Use TIMESTAMP to store the media type */
+		
+      /* Use TIMESTAMP to store the media type */
 		sql_exec(db, "UPDATE DETAILS set TIMESTAMP = %d where ID = %lld", media_path->types, (long long)id);
 		ScanDirectory(media_path->path, parent_id, media_path->types);
 		sql_exec(db, "INSERT into SETTINGS values (%Q, %Q)", "media_dir", media_path->path);
-		media_path = media_path->next;
 		if(parent_id != NULL) {
 			free(parent_id);
 			parent_id = NULL;
