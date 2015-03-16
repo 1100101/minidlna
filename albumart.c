@@ -368,7 +368,7 @@ check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 	}
 
 	/* If the embedded image matches the embedded image from the last file we
-	 * checked, just make a hard link.  Better than storing it on the disk twice.
+	 * checked, just make a link. Better than storing it on the disk twice.
 	 *
 	 * Daniel:
 	 * Is this really worth the complexity? We don't seem to bother with this
