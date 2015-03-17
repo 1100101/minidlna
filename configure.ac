@@ -152,68 +152,14 @@ AC_CHECK_HEADER(linux/netlink.h,
 ################################################################################################################
 ### Library checks
 
-CPPFLAGS_SAVE="$CPPFLAGS"
-for dir in "" /usr/local $INCLUDE_DIR; do
-    if test -n "$dir"; then
-        CPPFLAGS="$CPPFLAGS_SAVE -I$dir"
-    fi
-    AC_CHECK_HEADERS([libavutil/avutil.h ffmpeg/libavutil/avutil.h libav/libavutil/avutil.h avutil.h ffmpeg/avutil.h libav/avutil.h], [HAVE_LIBAVUTIL=1])
-    if test -z "$HAVE_LIBAVUTIL"; then
-        unset ac_cv_header_avutil_h
-        unset ac_cv_header_libavutil_avutil_h
-        unset ac_cv_header_ffmpeg_avutil_h
-        unset ac_cv_header_ffmpeg_libavutil_avutil_h
-        unset ac_cv_header_libav_avutil_h
-        unset ac_cv_header_libav_libavutil_avutil_h
-        continue
-    fi
-    break
-done
-if test -z "$HAVE_LIBAVUTIL"; then
-    AC_MSG_ERROR([libavutil headers not found or not usable])
-fi
+PKG_CHECK_MODULES([LIBAVUTIL], ["libavutil"],, AC_MSG_ERROR("avutil is not available!" ))
+PKG_CHECK_MODULES([LIBAVFORMAT], ["libavformat"],, AC_MSG_ERROR("avformat is not available!"))
+PKG_CHECK_MODULES([LIBAVCODEC], ["libavcodec"],, AC_MSG_ERROR("avcodec is not available!"))
 
-CPPFLAGS_SAVE="$CPPFLAGS"
-for dir in "" /usr/local $INCLUDE_DIR; do
-    if test -n "$dir"; then
-        CPPFLAGS="$CPPFLAGS_SAVE -I$dir"
-    fi
-    AC_CHECK_HEADERS([libavcodec/avcodec.h ffmpeg/libavcodec/avcodec.h libav/libavcodec/avcodec.h avcodec.h ffmpeg/avcodec.h libav/avcodec.h], [HAVE_LIBAVCODEC=1])
-    if test -z "$HAVE_LIBAVCODEC"; then
-        unset ac_cv_header_avcodec_h
-        unset ac_cv_header_libavcodec_avcodec_h
-        unset ac_cv_header_ffmpeg_avcodec_h
-        unset ac_cv_header_ffmpeg_libavcodec_avcodec_h
-        unset ac_cv_header_libav_avcodec_h
-        unset ac_cv_header_libav_libavcodec_avcodec_h
-        continue
-    fi
-    break
-done
-if test -z "$HAVE_LIBAVCODEC"; then
-    AC_MSG_ERROR([libavcodec headers not found or not usable])
-fi
-
-CPPFLAGS_SAVE="$CPPFLAGS"
-for dir in "" /usr/local $INCLUDE_DIR; do
-    if test -n "$dir"; then
-        CPPFLAGS="$CPPFLAGS_SAVE -I$dir"
-    fi
-    AC_CHECK_HEADERS([libavformat/avformat.h ffmpeg/libavformat/avformat.h libav/libavformat/avformat.h avformat.h ffmpeg/avformat.h libav/avformat.h], [HAVE_LIBAVFORMAT=1])
-    if test -z "$HAVE_LIBAVFORMAT"; then
-        unset ac_cv_header_avformat_h
-        unset ac_cv_header_libavformat_avformat_h
-        unset ac_cv_header_ffmpeg_avformat_h
-        unset ac_cv_header_ffmpeg_libavformat_avformat_h
-        unset ac_cv_header_libav_avformat_h
-        unset ac_cv_header_libav_libavformat_avformat_h
-        continue
-    fi
-    break
-done
-if test -z "$HAVE_LIBAVFORMAT"; then
-    AC_MSG_ERROR([libavformat headers not found or not usable])
-fi
+# Possible places the ffmpeg headers may be
+AC_CHECK_HEADERS([libavcodec/avcodec.h libavformat/avformat.h libavutil/avutil.h],,
+                 [AC_CHECK_HEADERS([ffmpeg/avcodec.h ffmpeg/avformat.h ffmpeg/avutil.h],,
+                 [AC_MSG_ERROR("FFmpeg headers are missing!")])])
 
 CPPFLAGS_SAVE="$CPPFLAGS"
 for dir in "" /usr/local $INCLUDE_DIR; do
@@ -256,7 +202,7 @@ test x"$ac_cv_header_FLAC_metadata_h" != x"yes" && AC_MSG_ERROR([libFLAC headers
 
 CFLAGS_SAVE="$CFLAGS"
 CFLAGS="$CFLAGS -Wall -Werror"
-AC_MSG_CHECKING([if we should use the daemon() libc function])
+AC_MSG_CHECKING([if we have the daemon() libc function])
 AC_COMPILE_IFELSE(
      [AC_LANG_PROGRAM(
          [
@@ -268,13 +214,24 @@ AC_COMPILE_IFELSE(
          ]
      )],
      [
-         AC_DEFINE([USE_DAEMON], [1], 
-                   [use the system's builtin daemon()])
+         have_daemon="yes"
          AC_MSG_RESULT([yes])
      ],
      [
+         have_daemon="no"
          AC_MSG_RESULT([no])
      ])
+
+AC_ARG_WITH([sysdaemon],
+            [AS_HELP_STRING([--with-sysdaemon],[Use the system's builtin (default=auto)])],
+            [want_sysdaemon=$with_sysdaemon],
+            [want_sysdaemon=no])
+
+if test "x$want_sysdaemon" != "xno" ; then
+    if test "x$have_daemon" = "xyes"; then
+      AC_DEFINE([USE_DAEMON],[1], [use the system's builtin daemon()])
+    fi
+fi
 
 AC_MSG_CHECKING([if scandir declaration requires const char cast])
 AC_COMPILE_IFELSE(
@@ -429,25 +386,6 @@ done
 test x"$ac_cv_lib_sqlite3_sqlite3_open" = x"yes" || AC_MSG_ERROR([Could not find libsqlite3])
 AC_SUBST(LIBSQLITE3_LIBS)
 
-LDFLAGS_SAVE="$LDFLAGS"
-for dir in "" /usr/local $SEARCH_DIR; do
-    if test -n "$dir"; then
-        LDFLAGS="$LDFLAGS -L$dir/lib"
-    fi
-    AC_CHECK_LIB([avformat], [av_open_input_file], [LIBAVFORMAT_LIBS="-lavformat"],
-		 [AC_CHECK_LIB([avformat], [avformat_open_input], [LIBAVFORMAT_LIBS="-lavformat"],
-		  [unset ac_cv_lib_avformat_av_open_input_file; unset ac_cv_lib_avformat_avformat_open_input; LDFLAGS="$LDFLAGS_SAVE"; continue])])
-    break
-done
-if test x"$ac_cv_lib_avformat_av_open_input_file" != x"yes" &&
-   test x"$ac_cv_lib_avformat_avformat_open_input" != x"yes"; then
-   AC_MSG_ERROR([Could not find libavformat - part of ffmpeg])
-fi
-AC_SUBST(LIBAVFORMAT_LIBS)
-
-AC_CHECK_LIB(avutil ,[av_rescale_q], [LIBAVUTIL_LIBS="-lavutil"], [AC_MSG_ERROR([Could not find libavutil - part of ffmpeg])])
-AC_SUBST(LIBAVUTIL_LIBS)
-
 AC_CHECK_LIB(pthread, pthread_create)
 
 # test if we have vorbisfile
@@ -508,29 +446,29 @@ AC_CHECK_FUNCS(inotify_init, AC_DEFINE(HAVE_INOTIFY,1,[Whether kernel has inotif
 ################################################################################################################
 ### Build Options
 
-AC_ARG_WITH(log-path,
-	AS_HELP_STRING([--with-log-path=PATH],[Default log path]),
+AC_ARG_WITH(logpath,
+	AS_HELP_STRING([--with-logpath=PATH],[Default Log path]),
 	[with_logpath="$withval"],[with_logpath="/var/log"])
 AC_DEFINE_UNQUOTED([DEFAULT_LOG_PATH],"${with_logpath}",[Log path])
 
 
-AC_ARG_WITH(db-path,
-	AS_HELP_STRING([--with-db-path=PATH],[Default DB path]),
+AC_ARG_WITH(dbpath,
+	AS_HELP_STRING([--with-dbpath=PATH],[Default DB path]),
 	[with_dbpath="$withval"],[with_dbpath="/var/cache/minidlna"])
 AC_DEFINE_UNQUOTED([DEFAULT_DB_PATH],"${with_dbpath}",[DB path])
 
-AC_ARG_WITH(os-name,
-	AS_HELP_STRING([--with-os-name=NAME],[OS Name]),
+AC_ARG_WITH(osname,
+	AS_HELP_STRING([--with-osname=NAME],[OS Name]),
 	[with_osname="$withval"],[with_osname="$(uname -s)"])
 AC_DEFINE_UNQUOTED([OS_NAME],"${with_osname}",[OS Name])
 
-AC_ARG_WITH(os-version,
-	AS_HELP_STRING([--with-os-version=VERS],[OS Version]),
+AC_ARG_WITH(osversion,
+	AS_HELP_STRING([--with-osversion=VERS],[OS Version]),
 	[with_osver="$withval"],[with_osver="$(uname -r)"])
 AC_DEFINE_UNQUOTED([OS_VERSION],"${with_osver}",[OS Version])
 
-AC_ARG_WITH(os-url,
-	AS_HELP_STRING([--with-os-url=URL],[OS URL]),
+AC_ARG_WITH(osurl,
+	AS_HELP_STRING([--with-osurl=URL],[OS URL]),
 	[with_osurl="$withval"],[with_osurl="http://www.netgear.com"])
 AC_DEFINE_UNQUOTED([OS_URL],"${with_osurl}",[OS URL])
 
