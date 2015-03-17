@@ -162,6 +162,10 @@ ParseHttpHeaders(struct upnphttp * h)
 				while(*p && (*p < '0' || *p > '9'))
 					p++;
 				h->req_contentlen = atoi(p);
+				if(h->req_contentlen < 0)
+				{
+					h->req_contentlen = 0;
+				}
 			}
 			else if(strncasecmp(line, "SOAPAction", 10)==0)
 			{
