@@ -66,6 +66,8 @@ static struct watch *watches;
 static struct watch *lastwatch = NULL;
 static time_t next_pl_fill = 0;
 
+static int IsMediaPath(const char * path);
+
 char *get_path_from_wd(int wd)
 {
 	struct watch *w = watches;
@@ -153,9 +155,12 @@ inotify_create_watches(int fd)
 
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
-		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", media_path->path);
-		add_watch(fd, media_path->path);
-		num_watches++;
+		if(!IsMediaPath(result[i]))
+		{
+			DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", media_path->path);
+			add_watch(fd, media_path->path);
+			num_watches++;
+		}
 	}
 	sql_get_table(db, "SELECT PATH from DETAILS where MIME is NULL and PATH is not NULL", &result, &rows, NULL);
 	for( i=1; i <= rows; i++ )
@@ -527,6 +532,43 @@ inotify_insert_directory(int fd, char *name, const char * path)
 	return 0;
 }
 
+static int
+IsMediaPath(const char * path)
+{
+  struct media_dir_s * current = media_dirs;
+  while(current != NULL)
+  {
+    if(strcmp(path, current->path) == 0)
+    {
+      return 1;
+    }
+    current = current->next;
+  }
+  return 0;
+}
+
+
+
+static void RemoveFromDB(const char * id)
+{
+   char * path = NULL;
+   path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = "
+                                        "(SELECT DETAIL_ID from OBJECTS WHERE OBJECT_ID = '%q')", id);
+   if(path)
+   {
+     DPRINTF(E_DEBUG, L_INOTIFY, "ParentPath: '%s'\n", path);
+     if(!IsMediaPath(path))
+     {
+       DPRINTF(E_DEBUG, L_INOTIFY, "%s is a not virtual folder, removing\n", path);
+       sql_exec(db, "DELETE from DETAILS where ID ="
+                    " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", id);
+       sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", id);
+     }
+
+     free(path);
+   }
+}
+
 int
 inotify_remove_file(const char * path)
 {
@@ -582,14 +624,15 @@ inotify_remove_file(const char * path)
 					continue;
 				if( children < 2 )
 				{
-					sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", result[i]);
-
+					RemoveFromDB(result[i]);
+					// If the file/folder we just removed was the last file/folder in the resp. parent folder,
+					// then remove the parent folder as well
 					ptr = strrchr(result[i], '$');
 					if( ptr )
 						*ptr = '\0';
 					if( sql_get_int_field(db, "SELECT count(*) from OBJECTS where PARENT_ID = '%s'", result[i]) == 0 )
 					{
-						sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", result[i]);
+						RemoveFromDB(result[i]);
 					}
 				}
 			}
@@ -729,7 +772,7 @@ start_inotify()
 						if( (event->mask & IN_MOVED_TO) ||
 						    (sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = '%q'", path_buf) != st.st_mtime) )
 						{
-							DPRINTF(E_DEBUG, L_INOTIFY, "The file %s was %s.\n",
+							DPRINTF(E_INFO, L_INOTIFY, "The file %s was %s.\n",
 								path_buf, (event->mask & IN_MOVED_TO ? "moved here" : "changed"));
 							inotify_insert_file(esc_name, path_buf);
 						}
@@ -737,7 +780,7 @@ start_inotify()
 				}
 				else if ( event->mask & (IN_DELETE|IN_MOVED_FROM) )
 				{
-					DPRINTF(E_DEBUG, L_INOTIFY, "The %s %s was %s.\n",
+					DPRINTF(E_INFO, L_INOTIFY, "The %s %s was %s.\n",
 						(event->mask & IN_ISDIR ? "directory" : "file"),
 						path_buf, (event->mask & IN_MOVED_FROM ? "moved away" : "deleted"));
 					if ( event->mask & IN_ISDIR )

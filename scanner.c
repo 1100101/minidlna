@@ -723,6 +723,7 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	static long long unsigned int fileno = 0;
 	enum file_types type;
 
+
 	DPRINTF(parent?E_INFO:E_WARN, L_SCANNER, _("Scanning %s\n"), dir);
 	switch( dir_types )
 	{
@@ -814,6 +815,21 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	}
 }
 
+char* GetParentID(struct media_dir_s * media_path) {
+  char * parent_id = NULL;
+  int startID;
+
+  if(media_path->vfolder != NULL) {
+    startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
+    insert_directory(media_path->vfolder, media_path->path, BROWSEDIR_ID, "", startID);
+    asprintf(&parent_id, "%s$%X", "", startID);
+    DPRINTF(E_DEBUG, L_SCANNER, _("[GetParentID] vfolder=%s, startID=%d, parent_id=%s\n"),
+            media_path->vfolder, startID, parent_id);
+  }
+
+  return parent_id;
+}
+
 static void
 _notify_start(void)
 {
@@ -839,6 +855,7 @@ start_scanner()
 {
 	struct media_dir_s *media_path;
 	char path[MAXPATHLEN];
+	char *parent_id = NULL;
 
 	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
@@ -851,24 +868,29 @@ start_scanner()
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
 		int64_t id;
-		char *bname, *parent = NULL;
-		char buf[8];
+		parent_id = GetParentID(media_path);
+		char *bname = NULL;
 		strncpyt(path, media_path->path, sizeof(path));
 		bname = basename(path);
 		/* If there are multiple media locations, add a level to the ContentDirectory */
-		if( !GETFLAG(MERGE_MEDIA_DIRS_MASK) && media_dirs->next )
+		if( !GETFLAG(MERGE_MEDIA_DIRS_MASK) && media_dirs->next && !parent_id )
 		{
 			int startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
 			id = insert_directory(bname, path, BROWSEDIR_ID, "", startID);
-			sprintf(buf, "$%X", startID);
-			parent = buf;
+			asprintf(&parent_id, "$%X", startID);
 		}
 		else
 			id = GetFolderMetadata(bname, media_path->path, NULL, NULL, 0);
+
 		/* Use TIMESTAMP to store the media type */
 		sql_exec(db, "UPDATE DETAILS set TIMESTAMP = %d where ID = %lld", media_path->types, (long long)id);
-		ScanDirectory(media_path->path, parent, media_path->types);
+		ScanDirectory(media_path->path, parent_id, media_path->types);
 		sql_exec(db, "INSERT into SETTINGS values (%Q, %Q)", "media_dir", media_path->path);
+		if(parent_id != NULL)
+		{
+			free(parent_id);
+			parent_id = NULL;
+		}
 	}
 	_notify_stop();
 	/* Create this index after scanning, so it doesn't slow down the scanning process.

@@ -303,6 +303,95 @@ open_db(sqlite3 **sq3)
 	return new_db;
 }
 
+static struct media_dir_s*
+ParseUPNPMediaDir(const char *media_option) {
+  media_types type = ALL_MEDIA;
+  struct media_dir_s * this_dir = NULL;
+  char * myval = NULL, *myval2 = NULL;
+  char type_str = '\0';
+  char * vfolder = NULL;
+  char * path_str = NULL;
+
+  char *path;
+  char real_path[PATH_MAX];
+  size_t len, len2, len3;
+
+  if(media_option && *media_option) {
+    myval = index(media_option, ',');
+    /* Case 1: The user only specified a path with no other options. */
+    if(myval == NULL) {
+      path_str = (char*)calloc(strlen(media_option), sizeof(char));
+      strcpy(path_str, media_option);
+    } else {
+      /* Case 2: First part is type */
+      len = (size_t)(myval - media_option);
+      if( len == 1) {
+        type_str = media_option[0];
+
+        /* Continue. There might be more options */
+        myval2 = index(myval+1, ',');
+
+        /* Case 3: Next options is path */
+        if(myval2 == NULL) {
+          path_str = (char*)calloc(strlen(myval-1), sizeof(char));
+          strncpy(path_str, myval+1, strlen(myval-1));
+        } else {
+          /* Nope. VFolder */
+          len2 = (size_t)(myval2 - (myval+1));
+          vfolder = (char*)calloc(len2, sizeof(char));
+          strncpy(vfolder, myval+1, len2);
+
+          len3 = strlen(myval+1);
+          path_str = (char*)calloc(len3, sizeof(char));
+          strncpy(path_str, myval2+1, len3);
+        }
+      } else {
+      /* Case 3: First part is vfolder */
+        vfolder = (char*)calloc(len, sizeof(char));
+        strncpy(vfolder, media_option, len);
+        len2 = strlen(media_option) - (len+1);
+        path_str = (char*)calloc(len2, sizeof(char));
+        strncpy(path_str, myval+1, len2);
+      }
+    }
+
+    if(type_str != '\0') {
+      switch( type_str ) {
+          case 'A':
+          case 'a':
+            type = TYPE_AUDIO;
+            break;
+          case 'V':
+          case 'v':
+            type = TYPE_VIDEO;
+            break;
+          case 'P':
+          case 'p':
+            type = TYPE_IMAGES;
+            break;
+      }
+    }
+    path = realpath(path_str, real_path);
+    if( !path )
+      path = (path_str);
+    if( access(path, F_OK) != 0 )
+    {
+      fprintf(stderr, "Media directory not accessible! [%s]\n", path);
+    } else {
+      this_dir = calloc(1, sizeof(struct media_dir_s));
+      this_dir->path = strdup(path);
+      this_dir->vfolder = vfolder;
+      this_dir->types = type;
+    }
+    if(path_str != NULL)
+      free(path_str);
+  } else {
+    fprintf(stderr, "Media directory option is empty string!\n");
+  }
+  
+  return this_dir;
+}
+
 static void
 check_db(sqlite3 *db, int new_db, pid_t *scanner_pid)
 {
@@ -318,7 +407,7 @@ check_db(sqlite3 *db, int new_db, pid_t *scanner_pid)
 		media_path = media_dirs;
 		while (media_path)
 		{
-			ret = sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = %Q", media_path->path);
+			ret = sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = %Q AND TIMESTAMP != '' ", media_path->path);
 			if (ret != media_path->types)
 			{
 				ret = 1;
@@ -354,7 +443,7 @@ rescan:
 		if (ret < 0)
 			DPRINTF(E_WARN, L_GENERAL, "Creating new database at %s/files.db\n", db_path);
 		else if (ret == 1)
-			DPRINTF(E_WARN, L_GENERAL, "New media_dir detected; rescanning...\n");
+			DPRINTF(E_WARN, L_GENERAL, "New media_dir '%s' detected; rescanning...\n", media_path->path);
 		else if (ret == 2)
 			DPRINTF(E_WARN, L_GENERAL, "Removed media_dir detected; rescanning...\n");
 		else
@@ -496,6 +585,7 @@ init(int argc, char **argv)
 	char mac_str[13];
 	char *string, *word;
 	char *path;
+	struct media_dir_s * this_dir = NULL;
 	char buf[PATH_MAX];
 	char log_str[75] = "general,artwork,database,inotify,scanner,metadata,http,ssdp,tivo=warn";
 	char *log_level = NULL;
@@ -568,7 +658,7 @@ init(int argc, char **argv)
 			break;
 		case UPNPSERIAL:
 			strncpyt(serialnumber, ary_options[i].value, SERIALNUMBER_MAX_LEN);
-			break;				
+			break;
 		case UPNPMODEL_NAME:
 			strncpyt(modelname, ary_options[i].value, MODELNAME_MAX_LEN);
 			break;
@@ -579,50 +669,13 @@ init(int argc, char **argv)
 			strncpyt(friendly_name, ary_options[i].value, FRIENDLYNAME_MAX_LEN);
 			break;
 		case UPNPMEDIADIR:
-			types = ALL_MEDIA;
-			path = ary_options[i].value;
-			word = strchr(path, ',');
-			if (word && (access(path, F_OK) != 0))
+      	this_dir = ParseUPNPMediaDir(ary_options[i].value);
+		   if(this_dir != NULL)
 			{
-				types = 0;
-				while (*path)
-				{
-					if (*path == ',')
-					{
-						path++;
-						break;
-					}
-					else if (*path == 'A' || *path == 'a')
-						types |= TYPE_AUDIO;
-					else if (*path == 'V' || *path == 'v')
-						types |= TYPE_VIDEO;
-					else if (*path == 'P' || *path == 'p')
-						types |= TYPE_IMAGES;
-					else
-						DPRINTF(E_FATAL, L_GENERAL, "Media directory entry not understood [%s]\n",
-							ary_options[i].value);
-					path++;
-				}
+				//Add new media dir to the beginning of the list
+				this_dir->next = media_dirs;
+				media_dirs = this_dir;
 			}
-			path = realpath(path, buf);
-			if (!path || access(path, F_OK) != 0)
-			{
-				DPRINTF(E_ERROR, L_GENERAL, "Media directory \"%s\" not accessible [%s]\n",
-					ary_options[i].value, strerror(errno));
-				break;
-			}
-			media_dir = calloc(1, sizeof(struct media_dir_s));
-			media_dir->path = strdup(path);
-			media_dir->types = types;
-			if (media_dirs)
-			{
-				struct media_dir_s *all_dirs = media_dirs;
-				while( all_dirs->next )
-					all_dirs = all_dirs->next;
-				all_dirs->next = media_dir;
-			}
-			else
-				media_dirs = media_dir;
 			break;
 		case UPNPALBUMART_NAMES:
 			for (string = ary_options[i].value; (word = strtok(string, "/")); string = NULL)
