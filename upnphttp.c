@@ -248,14 +248,49 @@ ParseHttpHeaders(struct upnphttp * h)
 				p = colon + 1;
 				while(isspace(*p))
 					p++;
-				if(strncasecmp(p, "bytes=", 6)==0) {
-					h->reqflags |= FLAG_RANGE;
-					h->req_RangeStart = strtoll(p+6, &colon, 10);
-					h->req_RangeEnd = colon ? atoll(colon+1) : 0;
-					DPRINTF(E_DEBUG, L_HTTP, "Range Start-End: %lld - %lld\n",
-						(long long)h->req_RangeStart,
-						h->req_RangeEnd ? (long long)h->req_RangeEnd : -1);
-				}
+
+				if(strncasecmp(p, "bytes=", 6)==0)
+				{
+					/* init values */
+					h->req_RangeStart = -1;
+					h->req_RangeEnd = -1;
+
+					p += 6;
+					while(isspace(*p))
+					{
+						p++;
+					}
+					if(isdigit(*p))
+					{
+						h->req_RangeStart = strtoll(p, &colon, 10);
+					}
+					else if(*p == '-')
+					{
+						colon = p;
+					}
+					else
+					{
+						// malformed 'Range:' attribute
+						colon = NULL;
+					}
+
+					if(colon && colon+1 && isdigit(*(colon+1)))
+					{
+						h->req_RangeEnd = atoll(colon+1);
+					}
+
+					if(!(h->req_RangeStart == -1 && h->req_RangeEnd == -1))
+					{
+						h->reqflags |= FLAG_RANGE;
+					}
+					else
+					{
+						h->req_RangeStart = 0;
+					}
+
+ 					DPRINTF(E_DEBUG, L_HTTP, "Range Start-End: %lld - %lld\n",
+						(long long)h->req_RangeStart, h->req_RangeEnd);
+ 				}
 			}
 			else if(strncasecmp(line, "Host", 4)==0)
 			{
@@ -1903,7 +1938,6 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 		}
 	}
 
-	offset = h->req_RangeStart;
 	sendfh = open(last_file.path, O_RDONLY);
 	if( sendfh < 0 ) {
 		DPRINTF(E_ERROR, L_HTTP, "Error opening %s\n", last_file.path);
@@ -1912,6 +1946,15 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 	}
 	size = lseek(sendfh, 0, SEEK_END);
 	lseek(sendfh, 0, SEEK_SET);
+
+	/* Special case: 'Range: bytes=-500' --> get final 500 bytes (inclusive) */
+	if(h->req_RangeStart == -1 && h->req_RangeEnd > 0)
+	{
+		h->req_RangeStart = size - h->req_RangeEnd;
+		h->req_RangeEnd = size - 1;
+	}
+
+	offset = h->req_RangeStart;
 
 	INIT_STR(str, header);
 
@@ -1929,7 +1972,8 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 
 	if( h->reqflags & FLAG_RANGE )
 	{
-		if( !h->req_RangeEnd || h->req_RangeEnd == size )
+		/* Special case: 'Range: bytes=9500-' --> no end value, h->req_RangeEnd will be -1 */
+		if( h->req_RangeEnd == size || h->req_RangeEnd == -1 )
 		{
 			h->req_RangeEnd = size - 1;
 		}
