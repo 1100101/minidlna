@@ -155,22 +155,22 @@ inotify_create_watches(int fd)
 
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
-		if(!IsMediaPath(result[i]))
-		{
-			DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", media_path->path);
-			add_watch(fd, media_path->path);
-			num_watches++;
-		}
+		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", media_path->path);
+		add_watch(fd, media_path->path);
+		num_watches++;
 	}
 	sql_get_table(db, "SELECT PATH from DETAILS where MIME is NULL and PATH is not NULL", &result, &rows, NULL);
 	for( i=1; i <= rows; i++ )
 	{
-		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
-		add_watch(fd, result[i]);
-		num_watches++;
+		if(!IsMediaPath(result[i]))
+		{
+   		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
+	   	add_watch(fd, result[i]);
+		   num_watches++;
+		}
 	}
 	sqlite3_free_table(result);
-		
+
 	max_watches = fopen("/proc/sys/fs/inotify/max_user_watches", "r");
 	if( max_watches )
 	{
@@ -358,7 +358,7 @@ inotify_insert_file(char * name, const char * path)
 			break;
 	}
 	
-	/* If it's already in the database and hasn't been modified, skip it. */
+	/* If it's already in the database, remove it before re-inserting. */
 	if( stat(path, &st) != 0 )
 		return -1;
 
@@ -369,9 +369,9 @@ inotify_insert_file(char * name, const char * path)
 		inotify_remove_file(path);
 		next_pl_fill = 1;
 	}
-	else if( ts < st.st_mtime )
+	else if( ts > 0 )
 	{
-		if( ts > 0 )
+		if( ts < st.st_mtime )
 			DPRINTF(E_DEBUG, L_INOTIFY, "%s is newer than the last db entry.\n", path);
 		inotify_remove_file(path);
 	}
