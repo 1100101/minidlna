@@ -1423,8 +1423,6 @@ GetVideoMetadata(const char *path, char *name)
 		}
 	}
 
-video_no_dlna:
-
 	if( strcmp(ctx->iformat->name, "asf") == 0 )
 	{
 		if( readtags((char *)path, &video, &file, "en_US", "asf") == 0 )
@@ -1459,17 +1457,16 @@ video_no_dlna:
 	}
 	#ifndef NETGEAR
 	#if LIBAVFORMAT_VERSION_INT >= ((52<<16)+(31<<8)+0)
-	#warning "reading metadata supported!"
-	else if( strcmp(ctx->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2") == 0 || strcmp(ctx->iformat->name, "matroska,webm") == 0 )
+	else if( strcmp(ctx->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2") == 0 )
 	{
 		if( ctx->metadata )
 		{
 			AVDictionaryEntry *tag = NULL;
 
-		   DPRINTF(E_DEBUG, L_METADATA, "Metadata:\n");
+			//DEBUG DPRINTF(E_DEBUG, L_METADATA, "Metadata:\n");
 			while( (tag = av_dict_get(ctx->metadata, "", tag, AV_DICT_IGNORE_SUFFIX)) )
 			{
-			   DPRINTF(E_DEBUG, L_METADATA, "  %-16s: %s\n", tag->key, tag->value);
+				//DEBUG DPRINTF(E_DEBUG, L_METADATA, "  %-16s: %s\n", tag->key, tag->value);
 				if( strcmp(tag->key, "title") == 0 )
 					m.title = escape_tag(trim(tag->value), 1);
 				else if( strcmp(tag->key, "genre") == 0 )
@@ -1483,6 +1480,7 @@ video_no_dlna:
 	}
 	#endif
 	#endif
+video_no_dlna:
 
 #ifdef TIVO_SUPPORT
 	if( ends_with(path, ".TiVo") && is_tivo_file(path) )
