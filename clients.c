@@ -221,6 +221,14 @@ struct client_type_s client_types[] =
 	  EUserAgent
 	},
 
+	/* User-Agent: GTVBox UPnP/1.0  GTVMediaPlayer/1.0 */
+	{ EGTVBox,
+	  FLAG_DLNA | FLAG_MIME_AVI_AVI,
+	  "FireTV (ViMu)",
+	  "GTVMediaPlayer/1.0",
+	  EUserAgent
+	},
+
 	{ EStandardDLNA150,
 	  FLAG_DLNA | FLAG_MIME_AVI_AVI,
 	  "Generic DLNA 1.5",

@@ -1317,7 +1317,7 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 		if (!totalMatches)
 			totalMatches = get_child_count(ObjectID, magic);
 		ret = 0;
-		if (SortCriteria && !orderBy)
+		if (SortCriteria && !orderBy && (args.client != EGTVBox))
 		{
 			__SORT_LIMIT
 			orderBy = parse_sort_criteria(SortCriteria, &ret);
@@ -1337,7 +1337,7 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 				ret = xasprintf(&orderBy, "order by o.CLASS, d.DISC, d.TRACK, d.TITLE");
 			}
 			/* LG TV ordering bug */
-			else if( args.client == ELGDevice )
+			else if( (args.client == ELGDevice) || (args.client == EGTVBox) )
 				ret = xasprintf(&orderBy, "order by o.CLASS, d.TITLE");
 			else
 				orderBy = parse_sort_criteria(SortCriteria, &ret);
