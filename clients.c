@@ -224,7 +224,7 @@ struct client_type_s client_types[] =
 
 	/* User-Agent: GTVBox UPnP/1.0  GTVMediaPlayer/1.0 */
 	{ EGTVBox,
-	  FLAG_DLNA | FLAG_MIME_AVI_AVI,
+	  FLAG_DLNA | FLAG_MIME_AVI_AVI | FLAG_CAPTION_RES,
 	  "FireTV (ViMu)",
 	  "GTVMediaPlayer/1.0",
 	  EUserAgent
