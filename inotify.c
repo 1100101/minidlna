@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <libgen.h>
+#include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -354,9 +355,8 @@ inotify_insert_file(char * name, const char * path)
 			if( !is_image(path) )
 				return -1;
 			break;
-                default:
+		default:
 			return -1;
-			break;
 	}
 	
 	/* If it's already in the database, remove it before re-inserting. */
