@@ -578,9 +578,7 @@ init(int argc, char **argv)
 	char buf[PATH_MAX];
 	char log_str[75] = "general,artwork,database,inotify,scanner,metadata,http,ssdp,tivo=warn";
 	char *log_level = NULL;
-	struct media_dir_s *media_dir;
 	int ifaces = 0;
-	media_types types;
 	uid_t uid = 0;
 
 	/* first check if "-f" option is used */
@@ -604,7 +602,7 @@ init(int argc, char **argv)
 	strncat(uuidvalue, mac_str, 12);
 
 	getfriendlyname(friendly_name, FRIENDLYNAME_MAX_LEN);
-	
+
 	runtime_vars.port = 8200;
 	runtime_vars.notify_interval = 895;	/* seconds between SSDP announces */
 	runtime_vars.max_connections = 50;
