@@ -2084,9 +2084,10 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 
 	if( h->reqflags & FLAG_CAPTION )
 	{
+		char buf[LOCATION_URL_MAX_LEN] = {};
+		const char* host = get_location_url_by_lan_addr(buf, h->iface);
 		if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%lld'", (long long)id) > 0 )
-			strcatf(&str, "CaptionInfo.sec: http://%s:%d/Captions/%lld.srt\r\n",
-			              lan_addr[h->iface].str, runtime_vars.port, (long long)id);
+			strcatf(&str, "CaptionInfo.sec: %s/Captions/%lld.srt\r\n", host, (long long)id);
 	}
 
 	strcatf(&str, "Accept-Ranges: bytes\r\n"

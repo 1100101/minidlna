@@ -46,6 +46,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/param.h>
@@ -89,3 +91,32 @@ short int scanning = 0;
 volatile short int quitting = 0;
 volatile uint32_t updateID = 0;
 const char *force_sort_criteria = NULL;
+
+
+/* override the auto-detection of the 'LOCATION' key in UPNP responses
+ * (i.e. in the response to M-SEARCH, as well as when generating media links) */
+char location_url_override[MAX_LAN_ADDR][LOCATION_URL_MAX_LEN] = {};
+const char* get_location_url_by_lan_addr(char* buf, size_t addr) {
+	if(location_url_override[addr][0]) {
+		return location_url_override[addr];
+	}
+	else {
+		snprintf(buf, LOCATION_URL_MAX_LEN, "http://%s:%d", lan_addr[addr].str, runtime_vars.port);
+		return buf;
+	}
+}
+
+const char* get_location_url_by_ifindex(char* buf, size_t ifindex) {
+	for(size_t i = 0; i < n_lan_addr; ++i) {
+		if(lan_addr[i].ifindex == ifindex) {
+			return get_location_url_by_lan_addr(buf, i);
+		}
+	}
+	// should never happen, but better be safe. Could also return NULL and
+	// let the caller deal with it.
+	return get_location_url_by_lan_addr(buf, 0);
+}
+
+void set_location_url_by_lan_addr(size_t addr, char* url) {
+	strncpy(location_url_override[addr], url, LOCATION_URL_MAX_LEN);
+}

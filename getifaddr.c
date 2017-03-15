@@ -337,8 +337,9 @@ reload_ifaces(int force_notify)
 			DPRINTF(E_INFO, L_GENERAL, "Enabling interface %s/%s\n",
 				lan_addr[i].str, inet_ntoa(lan_addr[i].mask));
 			SendSSDPGoodbyes(lan_addr[i].snotify);
-			SendSSDPNotifies(lan_addr[i].snotify, lan_addr[i].str,
-					runtime_vars.port, runtime_vars.notify_interval);
+			char buf[LOCATION_URL_MAX_LEN] = {};
+			const char* host = get_location_url_by_lan_addr(buf, i);
+			SendSSDPNotifies(lan_addr[i].snotify, runtime_vars.notify_interval, host);
 		}
 	}
 }

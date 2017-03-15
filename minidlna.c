@@ -552,6 +552,55 @@ static void init_nls(void)
 #endif
 }
 
+void parse_location_url_overrides(const char* location_url_overrides) {
+	if(!location_url_overrides) return;
+
+	char* list = strdup(location_url_overrides);
+	size_t ifaces = 0;
+	for(char *string = list, *word = NULL; (word = strtok(string, ",")); string = NULL) {
+		if(ifaces >= MAX_LAN_ADDR) {
+			DPRINTF(E_ERROR, L_GENERAL, "Too many interfaces in location override (max: %d), ignoring %s\n", MAX_LAN_ADDR, word);
+			break;
+		}
+		while(isspace(*word++));
+		char* sep = strchr(--word, ':');
+		if(!sep) {
+			DPRINTF(E_ERROR, L_GENERAL, "Invalid syntax in location override: '%s' is missing a ':'\n", word);
+			break;
+		}
+		*sep = 0;
+		char* ifname = word;
+		char* override = ++sep;
+		size_t override_len = strlen(override);
+		if(override_len == 0 ) {
+			DPRINTF(E_ERROR, L_GENERAL, "Invalid syntax in location override: empty override string for '%s'\n", ifname);
+			break;
+		}
+		while(override_len && override[override_len-1] == '/') {
+			// strip trailing '/', they are added back elsewhere in the code.
+			override[--override_len] = 0;
+		}
+		if(strcmp("http://", override) == 0) {
+			DPRINTF(E_WARN, L_GENERAL, "Note: location override '%s' does not start with 'http://'\n", override);
+		}
+		// locate the interface in runtime_vars.ifaces (lan_addrs has the same indexes)
+		size_t index = MAX_LAN_ADDR;
+		for(size_t i = 0; i < MAX_LAN_ADDR && runtime_vars.ifaces[i]; ++i) {
+			DPRINTF(E_DEBUG, L_GENERAL, "location override: runtime_vars.ifaces[%zu]='%s'\n", i, runtime_vars.ifaces[i]);
+			if(strcmp(runtime_vars.ifaces[i], ifname) == 0) {
+				index = i;
+			}
+		}
+		if(index == MAX_LAN_ADDR) {
+			DPRINTF(E_ERROR, L_GENERAL, "Could not locate interface '%s' for location override\n", ifname);
+			break;
+		}
+		DPRINTF(E_DEBUG, L_GENERAL, "Using location override '%s' for interface %zu ('%s')\n", override, index, ifname);
+		set_location_url_by_lan_addr(index, override);
+	}
+	free(list);
+}
+
 /* init phase :
  * 1) read configuration file
  * 2) read command line arguments
@@ -570,6 +619,7 @@ init(int argc, char **argv)
 	int options_flag = 0;
 	struct sigaction sa;
 	const char * presurl = NULL;
+	const char * location_url_overrides = NULL;
 	const char * optionsfile = "/etc/minidlna.conf";
 	char mac_str[13];
 	char *string, *word;
@@ -641,6 +691,9 @@ init(int argc, char **argv)
 			break;
 		case UPNPPRESENTATIONURL:
 			presurl = ary_options[i].value;
+			break;
+		case UPNPLOCATIONURLOVERRIDE:
+			location_url_overrides = ary_options[i].value;
 			break;
 		case UPNPNOTIFY_INTERVAL:
 			runtime_vars.notify_interval = atoi(ary_options[i].value);
@@ -880,6 +933,12 @@ init(int argc, char **argv)
 		case 'h':
 			runtime_vars.port = -1; // triggers help display
 			break;
+		case 'l':
+			if (i+1 < argc)
+				location_url_overrides = argv[++i];
+			else
+				DPRINTF(E_FATAL, L_GENERAL, "Option -%c takes one argument.\n", argv[i][1]);
+			break;
 		case 'R':
 			snprintf(buf, sizeof(buf), "rm -rf %s/files.db %s/art_cache", db_path, db_path);
 			if (system(buf) != 0)
@@ -937,6 +996,7 @@ init(int argc, char **argv)
 			"\t-v enables verbose output\n"
 			"\t-h displays this text\n"
 			"\t-R forces a full rescan\n"
+			"\t-l override the ssdp-location and soap url\n"
 			"\t-L do not create playlists\n"
 #ifdef __linux__
 			"\t-S changes behaviour for systemd\n"
@@ -994,6 +1054,13 @@ init(int argc, char **argv)
 		strncpyt(presentationurl, presurl, PRESENTATIONURL_MAX_LEN);
 	else
 		strcpy(presentationurl, "/");
+
+	/**
+	 * location overrides
+	 *
+	 * This is here because it depends on runtime_vars.ifaces[] being intialised.
+	 */
+	parse_location_url_overrides(location_url_overrides);
 
 	/* set signal handlers */
 	memset(&sa, 0, sizeof(struct sigaction));
@@ -1153,8 +1220,9 @@ main(int argc, char **argv)
 				DPRINTF(E_DEBUG, L_SSDP, "Sending SSDP notifies\n");
 				for (i = 0; i < n_lan_addr; i++)
 				{
-					SendSSDPNotifies(lan_addr[i].snotify, lan_addr[i].str,
-						runtime_vars.port, runtime_vars.notify_interval);
+					char buf[LOCATION_URL_MAX_LEN] = {};
+					const char* host = get_location_url_by_lan_addr(buf,i);
+					SendSSDPNotifies(lan_addr[i].snotify, runtime_vars.notify_interval, host);
 				}
 				memcpy(&lastnotifytime, &timeofday, sizeof(struct timeval));
 				timeout.tv_sec = runtime_vars.notify_interval;

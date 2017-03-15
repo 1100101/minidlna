@@ -38,6 +38,7 @@ enum upnpconfigoptions {
 	UPNPIFNAME = 1,			/* ext_ifname */
 	UPNPPORT,			/* port */
 	UPNPPRESENTATIONURL,		/* presentation_url */
+	UPNPLOCATIONURLOVERRIDE,	/* location url override */
 	UPNPNOTIFY_INTERVAL,		/* notify_interval */
 	UPNPUUID,			/* uuid */
 	UPNPSERIAL,			/* serial */

@@ -45,6 +45,7 @@ static const struct {
 	{ UPNPIFNAME, "network_interface" },
 	{ UPNPPORT, "port" },
 	{ UPNPPRESENTATIONURL, "presentation_url" },
+	{ UPNPLOCATIONURLOVERRIDE, "location_url" },
 	{ UPNPNOTIFY_INTERVAL, "notify_interval" },
 	{ UPNPUUID, "uuid"},
 	{ UPNPSERIAL, "serial"},

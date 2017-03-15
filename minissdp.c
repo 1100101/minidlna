@@ -217,8 +217,7 @@ _usleep(long usecs)
 /* not really an SSDP "announce" as it is the response
  * to a SSDP "M-SEARCH" */
 static void
-SendSSDPResponse(int s, struct sockaddr_in sockname, int st_no,
-                  const char *host, unsigned short port)
+SendSSDPResponse(int s, struct sockaddr_in sockname, int st_no, const char* host)
 {
 	int l, n;
 	char buf[512];
@@ -240,7 +239,7 @@ SendSSDPResponse(int s, struct sockaddr_in sockname, int st_no,
 		"USN: %s%s%s%s\r\n"
 		"EXT:\r\n"
 		"SERVER: " MINIDLNA_SERVER_STRING "\r\n"
-		"LOCATION: http://%s:%u" ROOTDESC_PATH "\r\n"
+		"LOCATION: %s" ROOTDESC_PATH "\r\n"
 		"Content-Length: 0\r\n"
 		"\r\n",
 		(runtime_vars.notify_interval<<1)+10,
@@ -251,7 +250,7 @@ SendSSDPResponse(int s, struct sockaddr_in sockname, int st_no,
 		(st_no > 0 ? "::" : ""),
 		(st_no > 0 ? known_service_types[st_no] : ""),
 		(st_no > 1 ? "1" : ""),
-		host, (unsigned int)port);
+		host);
 	DPRINTF(E_DEBUG, L_SSDP, "Sending M-SEARCH response to %s:%d ST: %s\n",
 		inet_ntoa(sockname.sin_addr), ntohs(sockname.sin_port),
 		known_service_types[st_no]);
@@ -262,8 +261,7 @@ SendSSDPResponse(int s, struct sockaddr_in sockname, int st_no,
 }
 
 void
-SendSSDPNotifies(int s, const char *host, unsigned short port,
-                 unsigned int interval)
+SendSSDPNotifies(int s, unsigned int interval, const char* host)
 {
 	struct sockaddr_in sockname;
 	int l, n, dup, i=0;
@@ -283,19 +281,19 @@ SendSSDPNotifies(int s, const char *host, unsigned short port,
 		i = 0;
 		while (known_service_types[i])
 		{
-			l = snprintf(bufr, sizeof(bufr), 
+			l = snprintf(bufr, sizeof(bufr),
 					"NOTIFY * HTTP/1.1\r\n"
-					"HOST:%s:%d\r\n"
-					"CACHE-CONTROL:max-age=%u\r\n"
-					"LOCATION:http://%s:%d" ROOTDESC_PATH"\r\n"
+					"HOST: %s:%d\r\n"
+					"CACHE-CONTROL: max-age=%u\r\n"
+					"LOCATION: %s" ROOTDESC_PATH"\r\n"
 					"SERVER: " MINIDLNA_SERVER_STRING "\r\n"
-					"NT:%s%s\r\n"
-					"USN:%s%s%s%s\r\n"
-					"NTS:ssdp:alive\r\n"
+					"NT: %s%s\r\n"
+					"USN: %s%s%s%s\r\n"
+					"NTS: ssdp:alive\r\n"
 					"\r\n",
 					SSDP_MCAST_ADDR, SSDP_PORT,
 					lifetime,
-					host, port,
+					host,
 					known_service_types[i],
 					(i > 1 ? "1" : ""),
 					uuidvalue,
@@ -651,14 +649,14 @@ ProcessSSDPRequest(int s, unsigned short port)
 		else if (st && (st_len > 0))
 		{
 			int l;
+			char buf[LOCATION_URL_MAX_LEN] = "127.0.0.1";
+			const char* host = buf;
 #ifdef __linux__
-			char host[40] = "127.0.0.1";
 			struct cmsghdr *cmsg;
 
 			/* find the interface we received the msg from */
 			for (cmsg = CMSG_FIRSTHDR(&mh); cmsg; cmsg = CMSG_NXTHDR(&mh, cmsg))
 			{
-				struct in_addr addr;
 				struct in_pktinfo *pi;
 				/* ignore the control headers that don't match what we want */
 				if (cmsg->cmsg_level != IPPROTO_IP ||
@@ -666,11 +664,9 @@ ProcessSSDPRequest(int s, unsigned short port)
 					continue;
 
 				pi = (struct in_pktinfo *)CMSG_DATA(cmsg);
-				addr = pi->ipi_spec_dst;
-				inet_ntop(AF_INET, &addr, host, sizeof(host));
+				host = get_location_url_by_ifindex(buf, pi->ipi_ifindex);
 			}
 #else
-			const char *host;
 			int iface = 0;
 			/* find in which sub network the client is */
 			for (i = 0; i < n_lan_addr; i++)
@@ -688,7 +684,7 @@ ProcessSSDPRequest(int s, unsigned short port)
 					inet_ntoa(sendername.sin_addr));
 				return;
 			}
-			host = lan_addr[iface].str;
+			host = get_location_url_by_ifindex(buf, iface);
 #endif
 			DPRINTF(E_DEBUG, L_SSDP, "SSDP M-SEARCH from %s:%d ST: %.*s, MX: %.*s, MAN: %.*s\n",
 				inet_ntoa(sendername.sin_addr),
@@ -723,8 +719,7 @@ ProcessSSDPRequest(int s, unsigned short port)
 						break;
 				}
 				_usleep(random()>>20);
-				SendSSDPResponse(s, sendername, i,
-						host, port);
+				SendSSDPResponse(s, sendername, i, host);
 				return;
 			}
 			/* Responds to request with ST: ssdp:all */
@@ -734,8 +729,7 @@ ProcessSSDPRequest(int s, unsigned short port)
 				for (i=0; known_service_types[i]; i++)
 				{
 					l = strlen(known_service_types[i]);
-					SendSSDPResponse(s, sendername, i,
-							host, port);
+					SendSSDPResponse(s, sendername, i, host);
 				}
 			}
 		}
@@ -852,8 +846,8 @@ SubmitServicesToMiniSSDPD(const char *host, unsigned short port)
 		CODELENGTH(l, p);
 		memcpy(p, MINIDLNA_SERVER_STRING, l);
 		p += l;
-		l = snprintf(strbuf, sizeof(strbuf), "http://%s:%u" ROOTDESC_PATH,
-		             host, (unsigned int)port);
+		l = snprintf(strbuf, sizeof(strbuf), "%s" ROOTDESC_PATH,
+		             host);
 		CODELENGTH(l, p);
 		memcpy(p, strbuf, l);
 		p += l;

@@ -209,6 +209,11 @@ extern char serialnumber[];
 #define PRESENTATIONURL_MAX_LEN 64
 extern char presentationurl[];
 
+#define LOCATION_URL_MAX_LEN 128
+const char* get_location_url_by_lan_addr(char* buf, size_t addr);
+const char* get_location_url_by_ifindex(char* buf, size_t ifindex);
+void set_location_url_by_lan_addr(size_t addr, char* url);
+
 /* lan addresses */
 extern int n_lan_addr;
 extern struct lan_addr_s lan_addr[];
