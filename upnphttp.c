@@ -719,7 +719,7 @@ ProcessHTTPPOST_upnphttp(struct upnphttp * h)
 		{
 			static const char err400str[] =
 				"<!DOCTYPE html>"
-				"<html><body>Bad request</body></html>";
+				"<HTML><BODY>Bad request</BODY></HTML>";
 			DPRINTF(E_WARN, L_HTTP, "No SOAPAction in HTTP headers\n");
 			h->respflags = FLAG_HTML;
 			BuildResp2_upnphttp(h, 400, "Bad Request",
@@ -746,7 +746,7 @@ check_event(struct upnphttp *h)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
 				            "<!DOCTYPE html>"
-				            "<html><body>Bad request</body></html>", 37);
+				            "<HTML><BODY>Bad request</BODY></HTML>", 37);
 			type = E_INVALID;
 		}
 		else if (strncmp(h->req_Callback, "http://", 7) != 0 ||
@@ -768,7 +768,7 @@ check_event(struct upnphttp *h)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
 				            "<!DOCTYPE html>"
-				            "<html><body>Bad request</body></html>", 37);
+				            "<HTML><BODY>Bad request</BODY></HTML>", 37);
 			type = E_INVALID;
 		}
 		else
