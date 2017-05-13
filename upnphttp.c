@@ -665,11 +665,53 @@ SendResp_presentation(struct upnphttp * h)
 			"<HEAD>"
 				"<TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE>"
 				"<STYLE>"
-					"td" "{"
-						"padding:" "10px;"
+					"body {"
+						"font-family:" "'Helvetica Neue', Helvetica, Arial;"
+						"font-size:" "14px;"
+						"line-height:" "20px;"
+						"font-weight:" "400;"
+						"font-smoothing:" "antialiased;"
+						"color:" "#3b3b3b;"
+						"background:" "#dddddd;"
 					"}"
-					"table" "{"
-						"border:" "1px;"
+
+					"table {"
+						"width:" "100%%;"
+						"box-shadow:" "0 1px 3px rgba(0,0,0,0.2);"
+						"border-collapse:" "collapse;"
+					"}"
+
+					"table tr {"
+						"background:" "#f6f6f6;"
+					"}"
+
+					"table tr:nth-of-type(odd) {"
+						"background:" "#e9e9e9;"
+					"}"
+
+					"table tr th {"
+						"padding:" "6px 12px;"
+						"font-weight:" "900;"
+						"color:" "#ffffff;"
+						"background:" "#2980b9;"
+						"text-align:" "left;"
+					"}"
+
+					"table tr td {"
+						"padding:" "6px 12px;"
+						"border-right:" "1px solid #ffffff;"
+					"}"
+
+					"table tr:nth-of-type(odd) td {"
+						"border-right:" "1px solid #f2f2f2;"
+					"}"
+
+					"table tr td:last-child {"
+						"border-right:" "0;"
+					"}"
+
+					"table tr td.numeric {"
+						"text-align:" "right;"
 					"}"
 				"</STYLE>"
 			"</HEAD>"
@@ -680,7 +722,7 @@ SendResp_presentation(struct upnphttp * h)
 		"<h3>Media library</h3>"
 		"<table>"
 		"<tr><th>Audio files</th><th>Video files</th><th>Image files</th></tr>"
-		"<tr><td>%d</td><td>%d</td><td>%d</td></tr>"
+		"<tr><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td></tr>"
 		"</table>", a, v, p);
 
 	if (scanning)
@@ -695,7 +737,7 @@ SendResp_presentation(struct upnphttp * h)
 	{
 		if (!clients[i].addr.s_addr)
 			continue;
-		strcatf(&str, "<tr><td>%d</td><td>%s</td><td>%s</td><td>%02X:%02X:%02X:%02X:%02X:%02X</td><td>%d</td></tr>",
+		strcatf(&str, "<tr><td class=\"numeric\">%d</td><td>%s</td><td>%s</td><td>%02X:%02X:%02X:%02X:%02X:%02X</td><td class=\"numeric\">%d</td></tr>",
 				i, clients[i].type->name, inet_ntoa(clients[i].addr),
 				clients[i].mac[0], clients[i].mac[1], clients[i].mac[2],
 				clients[i].mac[3], clients[i].mac[4], clients[i].mac[5], clients[i].connections);
