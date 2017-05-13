@@ -661,13 +661,24 @@ SendResp_presentation(struct upnphttp * h)
 	p = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'i*'");
 	strcatf(&str,
 		"<!DOCTYPE html>"
-		"<HTML><HEAD><TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE></HEAD>"
+		"<HTML>"
+			"<HEAD>"
+				"<TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE>"
+				"<STYLE>"
+					"td" "{"
+						"padding:" "10px;"
+					"}"
+					"table" "{"
+						"border:" "1px;"
+					"}"
+				"</STYLE>"
+			"</HEAD>"
 		"<BODY><div style=\"text-align: center\">"
 		"<h2>" SERVER_NAME " status</h2></div>");
 
 	strcatf(&str,
 		"<h3>Media library</h3>"
-		"<table border=1 cellpadding=10>"
+		"<table>"
 		"<tr><td>Audio files</td><td>%d</td></tr>"
 		"<tr><td>Video files</td><td>%d</td></tr>"
 		"<tr><td>Image files</td><td>%d</td></tr>"
@@ -679,7 +690,7 @@ SendResp_presentation(struct upnphttp * h)
 
 	strcatf(&str,
 		"<h3>Connected clients</h3>"
-		"<table border=1 cellpadding=10>"
+		"<table>"
 		"<tr><td>ID</td><td>Type</td><td>IP Address</td><td>HW Address</td><td>Connections</td></tr>");
 	for (i = 0; i < CLIENT_CACHE_SLOTS; i++)
 	{
