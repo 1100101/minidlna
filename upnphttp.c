@@ -502,6 +502,7 @@ static void
 Send400(struct upnphttp * h)
 {
 	static const char body400[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>400 Bad Request</TITLE></HEAD>"
 		"<BODY><H1>Bad Request</H1>The request is invalid"
 		" for this HTTP version.</BODY></HTML>\r\n";
@@ -517,6 +518,7 @@ static void
 Send403(struct upnphttp * h)
 {
 	static const char body403[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>403 Forbidden</TITLE></HEAD>"
 		"<BODY><H1>Forbidden</H1>You don't have permission to access this resource."
 		"</BODY></HTML>\r\n";
@@ -532,6 +534,7 @@ static void
 Send404(struct upnphttp * h)
 {
 	static const char body404[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD>"
 		"<BODY><H1>Not Found</H1>The requested URL was not found"
 		" on this server.</BODY></HTML>\r\n";
@@ -547,6 +550,7 @@ static void
 Send406(struct upnphttp * h)
 {
 	static const char body406[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>406 Not Acceptable</TITLE></HEAD>"
 		"<BODY><H1>Not Acceptable</H1>An unsupported operation"
 		" was requested.</BODY></HTML>\r\n";
@@ -562,6 +566,7 @@ static void
 Send416(struct upnphttp * h)
 {
 	static const char body416[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>416 Requested Range Not Satisfiable</TITLE></HEAD>"
 		"<BODY><H1>Requested Range Not Satisfiable</H1>The requested range"
 		" was outside the file's size.</BODY></HTML>\r\n";
@@ -577,6 +582,7 @@ void
 Send500(struct upnphttp * h)
 {
 	static const char body500[] = 
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>"
 		"<BODY><H1>Internal Server Error</H1>Server encountered "
 		"and Internal Error.</BODY></HTML>\r\n";
@@ -592,6 +598,7 @@ void
 Send501(struct upnphttp * h)
 {
 	static const char body501[] = 
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>501 Not Implemented</TITLE></HEAD>"
 		"<BODY><H1>Not Implemented</H1>The HTTP Method "
 		"is not implemented by this server.</BODY></HTML>\r\n";
@@ -653,6 +660,7 @@ SendResp_presentation(struct upnphttp * h)
 	v = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'v*'");
 	p = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'i*'");
 	strcatf(&str,
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE></HEAD>"
 		"<BODY><div style=\"text-align: center\">"
 		"<h2>" SERVER_NAME " status</h2></div>");
@@ -710,6 +718,7 @@ ProcessHTTPPOST_upnphttp(struct upnphttp * h)
 		else
 		{
 			static const char err400str[] =
+				"<!DOCTYPE html>"
 				"<html><body>Bad request</body></html>";
 			DPRINTF(E_WARN, L_HTTP, "No SOAPAction in HTTP headers\n");
 			h->respflags = FLAG_HTML;
@@ -736,6 +745,7 @@ check_event(struct upnphttp *h)
 		if (h->req_SID || !h->req_NT)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
+				            "<!DOCTYPE html>"
 				            "<html><body>Bad request</body></html>", 37);
 			type = E_INVALID;
 		}
@@ -757,6 +767,7 @@ check_event(struct upnphttp *h)
 		if (h->req_NT)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
+				            "<!DOCTYPE html>"
 				            "<html><body>Bad request</body></html>", 37);
 			type = E_INVALID;
 		}
