@@ -413,10 +413,34 @@ is_playlist(const char * file)
 	return (ends_with(file, ".m3u") || ends_with(file, ".pls"));
 }
 
+// List of common subtitle formats, taken from https://en.wikipedia.org/wiki/Subtitle_(captioning)
+const char* subtitle_formats[] = {
+	".aqt",    // AQTitle
+	".ass",    // Advanced SubStation Alpha
+	".gsub",   // Gloss Subtitle
+	".jss",    // JACOSub
+	".pjs",    // Phoenix Subtitle
+	".psb",    // PowerDivX
+	".rt",     // RealText
+	".smi",    // SAMI
+	".srt",    // SubRip
+	".ssa",    // SubStation Alpha
+	".ssf",    // Structured Subtitle Format
+	".stl",    // Spruce subtitle format[15]
+	".sub",    // MPSub, MicroDVD, SubViewer, VobSub (also needs .idx)
+	".ttxt",   // MPEG-4 Timed Text
+	".usf",    // Universal Subtitle Format
+};
+
 int
 is_caption(const char * file)
 {
-	return (ends_with(file, ".srt") || ends_with(file, ".smi"));
+	const char** subtitle_format = &subtitle_formats[0];
+	do {
+		if(ends_with(file, *subtitle_format))
+			return 1;
+	} while(*++subtitle_format);
+	return 0;
 }
 
 int

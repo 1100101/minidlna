@@ -120,7 +120,6 @@ check_for_captions(const char *path, int64_t detailID)
 {
 	char file[MAXPATHLEN];
 	char *p;
-	int ret;
 
 	strncpyt(file, path, sizeof(file));
 	p = strip_ext(file);
@@ -139,21 +138,17 @@ check_for_captions(const char *path, int64_t detailID)
 		}
 	}
 
-	strcpy(p, ".srt");
-	ret = access(file, R_OK);
-	if (ret != 0)
-	{
-		strcpy(p, ".smi");
-		ret = access(file, R_OK);
-	}
-
-	if (ret == 0)
-	{
-		sql_exec(db, "INSERT OR REPLACE into CAPTIONS"
-		             " (ID, PATH) "
-		             "VALUES"
-		             " (%lld, %Q)", detailID, file);
-	}
+	const char** subtitle_format = &subtitle_formats[0];
+	do {
+		strcpy(p, *subtitle_format);
+		if(access(file, R_OK) == 0) {
+			sql_exec(db, "INSERT OR REPLACE into CAPTIONS"
+			             " (ID, PATH) "
+			             "VALUES"
+			             " (%lld, %Q)", detailID, file);
+			break;
+		}
+	} while(*++subtitle_format);
 }
 
 void
@@ -177,7 +172,7 @@ parse_nfo(const char *path, metadata_t *m)
 	if( !nfo )
 		return;
 	nread = fread(&buf, 1, sizeof(buf), nfo);
-	
+
 	ParseNameValue(buf, nread, &xml, 0);
 
 	//printf("\ttype: %s\n", GetValueFromNameValueList(&xml, "rootElement"));
