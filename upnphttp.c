@@ -679,9 +679,8 @@ SendResp_presentation(struct upnphttp * h)
 	strcatf(&str,
 		"<h3>Media library</h3>"
 		"<table>"
-		"<tr><td>Audio files</td><td>%d</td></tr>"
-		"<tr><td>Video files</td><td>%d</td></tr>"
-		"<tr><td>Image files</td><td>%d</td></tr>"
+		"<tr><th>Audio files</th><th>Video files</th><th>Image files</th></tr>"
+		"<tr><td>%d</td><td>%d</td><td>%d</td></tr>"
 		"</table>", a, v, p);
 
 	if (scanning)
@@ -691,7 +690,7 @@ SendResp_presentation(struct upnphttp * h)
 	strcatf(&str,
 		"<h3>Connected clients</h3>"
 		"<table>"
-		"<tr><td>ID</td><td>Type</td><td>IP Address</td><td>HW Address</td><td>Connections</td></tr>");
+		"<tr><th>ID</th><th>Type</th><th>IP Address</th><th>HW Address</th><th>Connections</th></tr>");
 	for (i = 0; i < CLIENT_CACHE_SLOTS; i++)
 	{
 		if (!clients[i].addr.s_addr)
