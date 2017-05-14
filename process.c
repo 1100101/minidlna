@@ -64,7 +64,7 @@ add_process_info(pid_t pid, struct client_cache_s *client)
 	}
 }
 
-static inline void
+static inline int
 remove_process_info(pid_t pid)
 {
 	struct child *child;
@@ -76,10 +76,12 @@ remove_process_info(pid_t pid)
 		if (child->pid != pid)
 			continue;
 		child->pid = 0;
-		if (child->client)
+		if (child->client) {
 			child->client->connections--;
-		break;
+			return 1;
+		}
 	}
+	return 0;
 }
 
 pid_t
@@ -119,8 +121,12 @@ process_handle_child_termination(int signal)
 			else
 				break;
 		}
-		number_of_children--;
-		remove_process_info(pid);
+		if(remove_process_info(pid)) {
+			// Only update the number of children if the process that just died was
+			// a registered child, i.e. an http connection. If it was something else,
+			// such as the background scanner, it doesn't count as a child.
+			number_of_children--;
+		}
 	}
 }
 
