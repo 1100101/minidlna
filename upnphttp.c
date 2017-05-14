@@ -1196,7 +1196,7 @@ BuildHeader_upnphttp(struct upnphttp * h, int respcode,
 {
 	static const char httpresphead[] =
 		"%s %d %s\r\n"
-		"Content-Type: %s\r\n"
+		"Content-Type: text/%s; charset=\"utf-8\"\r\n"
 		"Connection: close\r\n"
 		"Content-Length: %d\r\n"
 		"Server: " MINIDLNA_SERVER_STRING "\r\n";
@@ -1215,7 +1215,7 @@ BuildHeader_upnphttp(struct upnphttp * h, int respcode,
 	res.off = 0;
 	strcatf(&res, httpresphead, "HTTP/1.1",
 	              respcode, respmsg,
-	              (h->respflags&FLAG_HTML)?"text/html":"text/xml; charset=\"utf-8\"",
+	              (h->respflags&FLAG_HTML)?"html":"xml",
 							 bodylen);
 	/* Additional headers */
 	if(h->respflags & FLAG_TIMEOUT) {
