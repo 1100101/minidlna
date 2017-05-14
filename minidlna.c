@@ -255,31 +255,6 @@ getfriendlyname(char *buf, int len)
 #endif
 }
 
-static int
-open_db(sqlite3 **sq3)
-{
-	char path[PATH_MAX];
-	int new_db = 0;
-
-	snprintf(path, sizeof(path), "%s/files.db", db_path);
-	if (access(path, F_OK) != 0)
-	{
-		new_db = 1;
-		make_dir(db_path, S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO);
-	}
-	if (sqlite3_open(path, &db) != SQLITE_OK)
-		DPRINTF(E_FATAL, L_GENERAL, "ERROR: Failed to open sqlite database!  Exiting...\n");
-	if (sq3)
-		*sq3 = db;
-	sqlite3_busy_timeout(db, 5000);
-	sql_exec(db, "pragma page_size = 4096");
-	sql_exec(db, "pragma journal_mode = OFF");
-	sql_exec(db, "pragma synchronous = OFF;");
-	sql_exec(db, "pragma default_cache_size = 8192;");
-
-	return new_db;
-}
-
 static struct media_dir_s*
 ParseUPNPMediaDir(const char *media_option) {
   media_types type = ALL_MEDIA;
@@ -439,27 +414,7 @@ rescan:
 	}
 	if (ret || rescan_db)
 	{
-#if USE_FORK
-		scanning = 1;
-		sqlite3_close(db);
-		*scanner_pid = fork();
-		open_db(&db);
-		if (*scanner_pid == 0) /* child (scanner) process */
-		{
-			start_scanner();
-			sqlite3_close(db);
-			log_close();
-			freeoptions();
-			free(children);
-			exit(EXIT_SUCCESS);
-		}
-		else if (*scanner_pid < 0)
-		{
-			start_scanner();
-		}
-#else
 		start_scanner();
-#endif
 	}
 }
 
@@ -1132,7 +1087,6 @@ main(int argc, char **argv)
 	time_t lastupdatetime = 0;
 	int max_fd = -1;
 	int last_changecnt = 0;
-	pid_t scanner_pid = 0;
 	pthread_t inotify_thread = 0;
 #ifdef TIVO_SUPPORT
 	uint8_t beacon_interval = 5;

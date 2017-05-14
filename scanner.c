@@ -919,6 +919,19 @@ start_rescan(void)
 void
 start_scanner()
 {
+	DPRINTF(E_DEBUG, L_SCANNER,  "Starting Media Scan\n");
+#if USE_FORK
+	scanning = 1;
+	sqlite3_close(db);
+	scanner_pid = fork();
+	open_db(&db);
+	if(scanner_pid > 0) { // parent process (doesn't need to do anything)
+		return;
+	}
+	// The child process (or us, in case of an error) will continue below
+	// At the end of the function the child will also close the database again.
+#endif
+
 	struct media_dir_s *media_path;
 	char path[MAXPATHLEN];
 	char *parent_id = NULL;
@@ -981,4 +994,12 @@ start_scanner()
 	DPRINTF(E_DEBUG, L_SCANNER, "Initial file scan completed\n");
 	//JM: Set up a db version number, so we know if we need to rebuild due to a new structure.
 	sql_exec(db, "pragma user_version = %d;", DB_VERSION);
+
+#if USE_FORK
+	if(scanner_pid == 0) { // child (scanner) process
+		sqlite3_close(db);
+		log_close();
+		exit(EXIT_SUCCESS);
+	}
+#endif
 }

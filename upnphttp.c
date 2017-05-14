@@ -81,6 +81,7 @@
 #include "clients.h"
 #include "process.h"
 #include "sendfile.h"
+#include "scanner.h"
 
 #define MAX_BUFFER_SIZE 2147483647
 #define MIN_BUFFER_SIZE 65536
@@ -663,6 +664,13 @@ SendResp_presentation(struct upnphttp * h)
 		"<!DOCTYPE html>"
 		"<HTML>"
 			"<HEAD>"
+	);
+	if(scanning) { // during the scan, refresh the page every 5sec
+		strcatf(&str,
+				"<meta http-equiv=\"refresh\" content=\"5\"/>"
+		);
+	}
+	strcatf(&str,
 				"<TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE>"
 				"<STYLE>"
 					"body {"
@@ -718,6 +726,10 @@ SendResp_presentation(struct upnphttp * h)
 					"table tr td.numeric {"
 						"text-align:" "right;"
 					"}"
+
+					"button {"
+						"width:" "20em;"
+					"}"
 				"</STYLE>"
 			"</HEAD>"
 		"<BODY>"
@@ -732,9 +744,16 @@ SendResp_presentation(struct upnphttp * h)
 		"<tr><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td></tr>"
 		"</table>", a, v, p);
 
-	if (scanning)
-		strcatf(&str,
-			"<br><i>* Media scan in progress</i><br>");
+	strcatf(&str, "<br>"
+	              "<form method=\"post\" action=\"?action=DoMediaScan\">"
+	              "<button type=\"submit\" autofocus");
+	if(scanning) {
+		strcatf(&str, " disabled><i>Media scan in progress...</i>");
+	}
+	else {
+		strcatf(&str, ">Rescan now");
+	}
+	strcatf(&str, "</button></form><br><br>");
 
 	strcatf(&str,
 		"<h3>Connected clients</h3>"
@@ -759,6 +778,33 @@ SendResp_presentation(struct upnphttp * h)
 	CloseSocket_upnphttp(h);
 }
 
+static void
+DoMediaScan(struct upnphttp * h)
+{
+	if(!scanning) {
+		db_clear(db);
+		if(CreateDatabase() != 0) {
+			DPRINTF(E_FATAL, L_DB_SQL, "ERROR: Failed to create sqlite database!\n");
+		}
+		start_scanner();
+	}
+	// Here we're redirecting the user back to the 'presentation' page through a
+	// http-equiv refresh, rather than just directly showing the 'presentation'
+	// page. The reason for this is that this action is a POST request, and is
+	// processed from ProcessHTTPPOST_upnphttp(). From there it's (currently)
+	// hard to get back into the parsing of a GET request.
+	const char body[] = "<!DOCTYPE html>"
+	                    "<HTML>"
+	                    "<HEAD>"
+	                    "<meta http-equiv=\"refresh\" content=\"0; url=/\"/>"
+	                    "</HEAD>"
+	                    "</HTML>";
+	h->respflags = FLAG_HTML;
+	BuildResp_upnphttp(h, body, sizeof(body) - 1);
+	SendResp_upnphttp(h);
+	CloseSocket_upnphttp(h);
+}
+
 /* ProcessHTTPPOST_upnphttp()
  * executes the SOAP query if it is possible */
 static void
@@ -774,8 +820,17 @@ ProcessHTTPPOST_upnphttp(struct upnphttp * h)
 				h->req_soapAction,
 				h->req_soapActionLen);
 		}
-		else
-		{
+		else {
+			const char* query = strchr(h->req_buf, '?');
+			const char* newline = strchr(h->req_buf, '\n');
+			if(query<newline) { // query is part of the request URL
+				if(strncmp(query, "?action=", 8) == 0) { // action specifier
+					if(strncmp(query+8, "DoMediaScan", 11) == 0) {
+						return DoMediaScan(h);
+					}
+				}
+			}
+
 			static const char err400str[] =
 				"<!DOCTYPE html>"
 				"<HTML><BODY>Bad request</BODY></HTML>";

@@ -18,10 +18,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "sql.h"
 #include "upnpglobalvars.h"
 #include "log.h"
+#include "utils.h"
 
 int
 sql_exec(sqlite3 *db, const char *fmt, ...)
@@ -257,6 +259,31 @@ sql_get_text_field(sqlite3 *db, const char *fmt, ...)
 	sqlite3_finalize(stmt);
 
 	return str;
+}
+
+int
+open_db(sqlite3 **sq3)
+{
+	char path[PATH_MAX];
+	int new_db = 0;
+
+	snprintf(path, sizeof(path), "%s/files.db", db_path);
+	if (access(path, F_OK) != 0)
+	{
+		new_db = 1;
+		make_dir(db_path, S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO);
+	}
+	if (sqlite3_open(path, &db) != SQLITE_OK)
+		DPRINTF(E_FATAL, L_GENERAL, "ERROR: Failed to open sqlite database!  Exiting...\n");
+	if (sq3)
+		*sq3 = db;
+	sqlite3_busy_timeout(db, 5000);
+	sql_exec(db, "pragma page_size = 4096");
+	sql_exec(db, "pragma journal_mode = OFF");
+	sql_exec(db, "pragma synchronous = OFF;");
+	sql_exec(db, "pragma default_cache_size = 8192;");
+
+	return new_db;
 }
 
 int
