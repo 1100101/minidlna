@@ -114,7 +114,7 @@ sql_get_int_field(sqlite3 *db, const char *fmt, ...)
 			ret = sqlite3_column_int(stmt, 0);
 			break;
 		default:
-			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %s\n%s\n", __func__, sqlite3_errmsg(db), sql);
+			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %d - %s\n%s\n", __func__, result, sqlite3_errmsg(db), sql);
 			ret = -1;
 			break;
  	}
@@ -173,7 +173,7 @@ sql_get_int64_field(sqlite3 *db, const char *fmt, ...)
 			ret = sqlite3_column_int64(stmt, 0);
 			break;
 		default:
-			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %s\n%s\n", __func__, sqlite3_errmsg(db), sql);
+			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %d - %s\n%s\n", __func__, result, sqlite3_errmsg(db), sql);
 			ret = -1;
 			break;
  	}
@@ -250,7 +250,7 @@ sql_get_text_field(sqlite3 *db, const char *fmt, ...)
 			break;
 
 		default:
-			DPRINTF(E_WARN, L_DB_SQL, "SQL step failed: %s\n", sqlite3_errmsg(db));
+			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %d - %s\n%s\n", __func__, result, sqlite3_errmsg(db), sql);
 			str = NULL;
 			break;
 	}
