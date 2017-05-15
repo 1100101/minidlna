@@ -1287,6 +1287,15 @@ main(int argc, char **argv)
 		{
 			if (!scanner_pid || kill(scanner_pid, 0) != 0)
 			{
+				// While scanning, the content database is in flux, and queries may
+				// fail (apparently). However, even the first query _after_ scanning
+				// has completed sometimes failed (first error 1, "SQL logic error or
+				// missing database", then if the same statement is re-stepped error 1,
+				// "database schema has changed"). By re-opening the database here,
+				// before marking scanning as completed, we force SQLite to refresh,
+				// preventing these errors.
+				sqlite3_close(db);
+				open_db(&db);
 				scanning = 0;
 				updateID++;
 			}
