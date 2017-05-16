@@ -670,6 +670,15 @@ init(int argc, char **argv)
 		case UPNPFRIENDLYNAME:
 			strncpyt(friendly_name, ary_options[i].value, FRIENDLYNAME_MAX_LEN);
 			break;
+		case UPNPICONDIR:
+			path = realpath(ary_options[i].value, buf);
+			if (!path)
+				path = (ary_options[i].value);
+			make_dir(path, S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO);
+			if (access(path, F_OK) != 0)
+				DPRINTF(E_FATAL, L_GENERAL, "UPNP Icon path not accessible! [%s]\n", path);
+			strncpyt(icon_path, path, PATH_MAX);
+			break;
 		case UPNPMEDIADIR:
       	this_dir = ParseUPNPMediaDir(ary_options[i].value);
 		   if(this_dir != NULL)
@@ -812,6 +821,8 @@ init(int argc, char **argv)
 	}
 	if (db_path[0] == '\0')
 		strncpyt(db_path, DEFAULT_DB_PATH, PATH_MAX);
+	if (icon_path[0] == '\0')
+		strncpyt(icon_path, DEFAULT_ICON_PATH, PATH_MAX);
 
 	/* command line arguments processing */
 	for (i=1; i<argc; i++)

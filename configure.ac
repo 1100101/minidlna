@@ -464,6 +464,11 @@ AC_ARG_WITH(dbpath,
 	[with_dbpath="$withval"],[with_dbpath="/var/cache/minidlna"])
 AC_DEFINE_UNQUOTED([DEFAULT_DB_PATH],"${with_dbpath}",[DB path])
 
+AC_ARG_WITH(iconpath,
+	AS_HELP_STRING([--with-iconpath=PATH],[Default Icon path]),
+	[with_iconpath="$withval"],[with_iconpath="/usr/share/minidlna"])
+AC_DEFINE_UNQUOTED([DEFAULT_ICON_PATH],"${with_iconpath}",[Icon path])
+
 AC_ARG_WITH(osname,
 	AS_HELP_STRING([--with-osname=NAME],[OS Name]),
 	[with_osname="$withval"],[with_osname="$(uname -s)"])
