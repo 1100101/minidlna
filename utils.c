@@ -66,6 +66,18 @@ ends_with(const char * haystack, const char * needle)
 	return (strcasecmp(end, needle) ? 0 : 1);
 }
 
+int
+begins_with(const char * haystack, const char * needle)
+{
+	int nlen = strlen(needle);
+	int hlen = strlen(haystack);
+
+	if( hlen < nlen )
+		return 0;
+
+	return (strncasecmp(haystack, needle, nlen) ? 0 : 1);
+}
+
 char *
 trim(char *str)
 {
