@@ -727,8 +727,13 @@ SendResp_presentation(struct upnphttp * h)
 						"text-align:" "right;"
 					"}"
 
+					"form {"
+						"display:" "inline;"
+					"}"
+
 					"button {"
 						"width:" "20em;"
+						"margin-right:" "1em;"
 					"}"
 				"</STYLE>"
 			"</HEAD>"
@@ -744,14 +749,26 @@ SendResp_presentation(struct upnphttp * h)
 		"<tr><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td></tr>"
 		"</table>", a, v, p);
 
+	// Full rescan button
 	strcatf(&str, "<br>"
-	              "<form method=\"post\" action=\"?action=DoMediaScan\">"
+	              "<form method=\"post\" action=\"?action=DoFullMediaScan\">"
+	              "<button type=\"submit\"");
+	if(scanning) {
+		strcatf(&str, " disabled><i>Media scan in progress...</i>");
+	}
+	else {
+		strcatf(&str, ">Rebuild media library");
+	}
+	strcatf(&str, "</button></form>");
+
+	// Fast rescan button
+	strcatf(&str, "<form method=\"post\" action=\"?action=DoIncrementalMediaScan\">"
 	              "<button type=\"submit\" autofocus");
 	if(scanning) {
 		strcatf(&str, " disabled><i>Media scan in progress...</i>");
 	}
 	else {
-		strcatf(&str, ">Rescan now");
+		strcatf(&str, ">Incremental update");
 	}
 	strcatf(&str, "</button></form><br><br>");
 
@@ -779,13 +796,16 @@ SendResp_presentation(struct upnphttp * h)
 }
 
 static void
-DoMediaScan(struct upnphttp * h)
+DoMediaScan(struct upnphttp * h, int rebuild_db)
 {
 	if(!scanning) {
-		db_clear(db);
-		if(CreateDatabase() != 0) {
-			DPRINTF(E_FATAL, L_DB_SQL, "ERROR: Failed to create sqlite database!\n");
+		if(rebuild_db) {
+			db_clear(db);
+			if(CreateDatabase() != 0) {
+				DPRINTF(E_FATAL, L_DB_SQL, "ERROR: Failed to create sqlite database!\n");
+			}
 		}
+		rescan_db = !rebuild_db;
 		start_scanner();
 	}
 	// Here we're redirecting the user back to the 'presentation' page through a
@@ -825,8 +845,11 @@ ProcessHTTPPOST_upnphttp(struct upnphttp * h)
 			const char* newline = strchr(h->req_buf, '\n');
 			if(query<newline) { // query is part of the request URL
 				if(strncmp(query, "?action=", 8) == 0) { // action specifier
-					if(strncmp(query+8, "DoMediaScan", 11) == 0) {
-						return DoMediaScan(h);
+					if(strncmp(query+8, "DoFullMediaScan", 15) == 0) {
+						return DoMediaScan(h, 1);
+					}
+					else if(strncmp(query+8, "DoIncrementalMediaScan", 22) == 0) {
+						return DoMediaScan(h, 0);
 					}
 				}
 			}

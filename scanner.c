@@ -917,38 +917,13 @@ start_rescan(void)
 /* end rescan functions */
 
 void
-start_scanner()
+start_rebuild()
 {
-	DPRINTF(E_DEBUG, L_SCANNER,  "Starting Media Scan\n");
-#if USE_FORK
-	scanning = 1;
-	sqlite3_close(db);
-	scanner_pid = fork();
-	open_db(&db);
-	if(scanner_pid > 0) { // parent process (doesn't need to do anything)
-		return;
-	}
-	// The child process (or us, in case of an error) will continue below
-	// At the end of the function the child will also close the database again.
-#endif
+	_notify_start();
 
 	struct media_dir_s *media_path;
 	char path[MAXPATHLEN];
 	char *parent_id = NULL;
-
-	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
-		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
-
-	setlocale(LC_COLLATE, "");
-
-	av_register_all();
-	av_log_set_level(AV_LOG_PANIC);
-	if( rescan_db )
-	{
-		start_rescan();
-		return;
-	}
-	_notify_start();
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
 		int64_t id;
@@ -994,6 +969,38 @@ start_scanner()
 	DPRINTF(E_DEBUG, L_SCANNER, "Initial file scan completed\n");
 	//JM: Set up a db version number, so we know if we need to rebuild due to a new structure.
 	sql_exec(db, "pragma user_version = %d;", DB_VERSION);
+}
+
+void
+start_scanner()
+{
+	DPRINTF(E_DEBUG, L_SCANNER,  "Starting Media Scan\n");
+#if USE_FORK
+	scanning = 1;
+	sqlite3_close(db);
+	scanner_pid = fork();
+	open_db(&db);
+	if(scanner_pid > 0) { // parent process (doesn't need to do anything)
+		return;
+	}
+	// The child process (or us, in case of an error) will continue below
+	// At the end of the function the child will also close the database again.
+#endif
+
+	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
+		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
+
+	setlocale(LC_COLLATE, "");
+
+	av_register_all();
+	av_log_set_level(AV_LOG_PANIC);
+	if( rescan_db )
+	{
+		start_rescan();
+	}
+	else {
+		start_rebuild();
+	}
 
 #if USE_FORK
 	if(scanner_pid == 0) { // child (scanner) process
