@@ -672,6 +672,21 @@ SendResp_presentation(struct upnphttp * h)
 	}
 	strcatf(&str,
 				"<TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE>"
+				// Technically, the browser should ask for a favicon on its own, but
+				// it seems that at least firefox sometimes has ideas of its own. It
+				// will aggressively cache favicons (and/or not ask for one). One
+				// trick that seems to somehow help is to append a question mark
+				// to the of the URL. For some unknown reason this seems to trigger
+				// firefox to always request the favicon, without even the need for
+				// a real 'cache buster'.
+				// C.f. http://stackoverflow.com/questions/8616016/favicon-not-displayed-by-firefox
+				// Note however that even though the icon is requested, firefox is
+				// *still* caching it. The only way to refresh it seems to be to
+				// just keep trying to refresh, stopping e.g. minidlna (so you get
+				// "Unable to connect", close the tab, reopen tab, etc, etc, until
+				// eventually the icon will update. Perhaps there is a timeout on
+				// refresh?
+				"<link rel=\"shortcut icon\" href=\"favicon.ico?\" />"
 				"<STYLE>"
 					"body {"
 						"font-family:" "'Helvetica Neue', Helvetica, Arial;"
@@ -1179,6 +1194,10 @@ ProcessHttpQuery_upnphttp(struct upnphttp * h)
 		{
 			SendResp_resizedimg(h, HttpUrl+9);
 		}
+		else if(begins_with(HttpUrl, "/favicon.ico"))
+		{
+			SendResp_icon(h, "favicon.ico");
+		}
 		else if(strncmp(HttpUrl, "/icons/", 7) == 0)
 		{
 			SendResp_icon(h, HttpUrl+7);
@@ -1564,10 +1583,10 @@ static void
 SendResp_icon(struct upnphttp * h, char * icon)
 {
 	char header[512];
-	char mime[12] = "image/";
+	char mime[16] = "image/";
 	char *data = NULL;
 	long size;
-	int ret, fd;
+	int fd;
 	struct string_s str;
 
 	char *path;
@@ -1600,6 +1619,12 @@ SendResp_icon(struct upnphttp * h, char * icon)
 			data = (char *)jpeg_lrg;
 			size = sizeof(jpeg_lrg)-1;
 		}
+		else if( strcmp(icon, "favicon.ico") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending favicon\n");
+			data = (char *)favicon;
+			size = sizeof(favicon)-1;
+		}
 		else
 		{
 			DPRINTF(E_WARN, L_HTTP, "Invalid icon request: %s\n", icon);
@@ -1620,6 +1645,10 @@ SendResp_icon(struct upnphttp * h, char * icon)
 	else if( ends_with(icon, ".png") )
 	{
 		strcpy(mime+6, "png");
+	}
+	else if( ends_with(icon, ".ico") )
+	{
+		strcpy(mime+6, "x-icon");
 	}
 
 	INIT_STR(str, header);
@@ -1642,6 +1671,9 @@ SendResp_icon(struct upnphttp * h, char * icon)
 		}
 	}
 	CloseSocket_upnphttp(h);
+	if(fd>=0) {
+		close(fd);
+	}
 }
 
 static void
