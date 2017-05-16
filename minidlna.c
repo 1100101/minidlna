@@ -90,16 +90,17 @@
 #include "process.h"
 #include "upnpevents.h"
 #include "scanner.h"
-#include "inotify.h"
+#include "monitor.h"
 #include "log.h"
 #include "tivo_beacon.h"
 #include "tivo_utils.h"
+#include "avahi.h"
 
 #if SQLITE_VERSION_NUMBER < 3005001
 # warning "Your SQLite3 library appears to be too old!  Please use 3.5.1 or newer."
 # define sqlite3_threadsafe() 0
 #endif
- 
+
 /* OpenAndConfHTTPSocket() :
  * setup the socket used to handle incoming HTTP connections. */
 static int
@@ -134,7 +135,7 @@ OpenAndConfHTTPSocket(unsigned short port)
 		return -1;
 	}
 
-	if (listen(s, 6) < 0)
+	if (listen(s, 16) < 0)
 	{
 		DPRINTF(E_ERROR, L_GENERAL, "listen(http): %s\n", strerror(errno));
 		close(s);
@@ -144,7 +145,7 @@ OpenAndConfHTTPSocket(unsigned short port)
 	return s;
 }
 
-/* Handler for the SIGTERM signal (kill) 
+/* Handler for the SIGTERM signal (kill)
  * SIGINT is also handled */
 static void
 sigterm(int sig)
@@ -364,7 +365,7 @@ ParseUPNPMediaDir(const char *media_option) {
   } else {
     fprintf(stderr, "Media directory option is empty string!\n");
   }
-  
+
   return this_dir;
 }
 
@@ -416,12 +417,13 @@ check_db(sqlite3 *db, int new_db, pid_t *scanner_pid)
 	if (ret != 0)
 	{
 rescan:
+		rescan_db = 0;
 		if (ret < 0)
 			DPRINTF(E_WARN, L_GENERAL, "Creating new database at %s/files.db\n", db_path);
 		else if (ret == 1)
-			DPRINTF(E_WARN, L_GENERAL, "New media_dir '%s' detected; rescanning...\n", media_path->path);
+			DPRINTF(E_WARN, L_GENERAL, "New media_dir detected; rebuilding...\n");
 		else if (ret == 2)
-			DPRINTF(E_WARN, L_GENERAL, "Removed media_dir detected; rescanning...\n");
+			DPRINTF(E_WARN, L_GENERAL, "Removed media_dir detected; rebuilding...\n");
 		else
 			DPRINTF(E_WARN, L_GENERAL, "Database version mismatch (%d=>%d); need to recreate...\n",
 				ret, DB_VERSION);
@@ -434,6 +436,9 @@ rescan:
 		open_db(&db);
 		if (CreateDatabase() != 0)
 			DPRINTF(E_FATAL, L_GENERAL, "ERROR: Failed to create sqlite database!  Exiting...\n");
+	}
+	if (ret || rescan_db)
+	{
 #if USE_FORK
 		scanning = 1;
 		sqlite3_close(db);
@@ -496,7 +501,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 					dir, strerror(errno));
 		}
 	}
-	
+
 	pidfile = fopen(fname, "w");
 	if (!pidfile)
 	{
@@ -507,7 +512,7 @@ writepidfile(const char *fname, int pid, uid_t uid)
 
 	if (fprintf(pidfile, "%d\n", pid) <= 0)
 	{
-		DPRINTF(E_ERROR, L_GENERAL, 
+		DPRINTF(E_ERROR, L_GENERAL,
 			"Unable to write to pidfile %s: %s\n", fname, strerror(errno));
 		ret = -1;
 	}
@@ -834,6 +839,10 @@ init(int argc, char **argv)
 			if (strtobool(ary_options[i].value))
 				SETFLAG(WIDE_LINKS_MASK);
 			break;
+		case TIVO_DISCOVERY:
+			if (strcasecmp(ary_options[i].value, "beacon") == 0)
+				CLEARFLAG(TIVO_BONJOUR_MASK);
+			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
 				optionsfile);
@@ -938,6 +947,8 @@ init(int argc, char **argv)
 				location_url_overrides = argv[++i];
 			else
 				DPRINTF(E_FATAL, L_GENERAL, "Option -%c takes one argument.\n", argv[i][1]);
+		case 'r':
+			rescan_db = 1;
 			break;
 		case 'R':
 			snprintf(buf, sizeof(buf), "rm -rf %s/files.db %s/art_cache", db_path, db_path);
@@ -985,9 +996,9 @@ init(int argc, char **argv)
 			"\t\t[-t notify_interval] [-P pid_filename]\n"
 			"\t\t[-s serial] [-m model_number]\n"
 #ifdef __linux__
-			"\t\t[-w url] [-R] [-L] [-S] [-V] [-h]\n"
+			"\t\t[-w url] [-l] [-r] [-R] [-L] [-S] [-V] [-h]\n"
 #else
-			"\t\t[-w url] [-R] [-L] [-V] [-h]\n"
+			"\t\t[-w url] [-l] [-r] [-R] [-L] [-V] [-h]\n"
 #endif
 			"\nNotes:\n\tNotify interval is in seconds. Default is 895 seconds.\n"
 			"\tDefault pid file is %s.\n"
@@ -995,8 +1006,9 @@ init(int argc, char **argv)
 			"\t-w sets the presentation url. Default is http address on port 80\n"
 			"\t-v enables verbose output\n"
 			"\t-h displays this text\n"
-			"\t-R forces a full rescan\n"
-			"\t-l override the ssdp-location and soap url\n"
+			"\t-l configures ssdp-location overrides\n"
+			"\t-r forces a rescan\n"
+			"\t-R forces a rebuild\n"
 			"\t-L do not create playlists\n"
 #ifdef __linux__
 			"\t-S changes behaviour for systemd\n"
@@ -1045,7 +1057,7 @@ init(int argc, char **argv)
 	{
 		DPRINTF(E_ERROR, L_GENERAL, SERVER_NAME " is already running. EXITING.\n");
 		return 1;
-	}	
+	}
 
 	set_startup_time();
 
@@ -1187,14 +1199,21 @@ main(int argc, char **argv)
 		ret = sqlite3_create_function(db, "tivorandom", 1, SQLITE_UTF8, NULL, &TiVoRandomSeedFunc, NULL, NULL);
 		if (ret != SQLITE_OK)
 			DPRINTF(E_ERROR, L_TIVO, "ERROR: Failed to add sqlite randomize function for TiVo!\n");
-		/* open socket for sending Tivo notifications */
-		sbeacon = OpenAndConfTivoBeaconSocket();
-		if(sbeacon < 0)
-			DPRINTF(E_FATAL, L_GENERAL, "Failed to open sockets for sending Tivo beacon notify "
-				"messages. EXITING\n");
-		tivo_bcast.sin_family = AF_INET;
-		tivo_bcast.sin_addr.s_addr = htonl(getBcastAddress());
-		tivo_bcast.sin_port = htons(2190);
+		if (GETFLAG(TIVO_BONJOUR_MASK))
+		{
+			tivo_bonjour_register();
+		}
+		else
+		{
+			/* open socket for sending Tivo notifications */
+			sbeacon = OpenAndConfTivoBeaconSocket();
+			if(sbeacon < 0)
+				DPRINTF(E_FATAL, L_GENERAL, "Failed to open sockets for sending Tivo beacon notify "
+					"messages. EXITING\n");
+			tivo_bcast.sin_family = AF_INET;
+			tivo_bcast.sin_addr.s_addr = htonl(getBcastAddress());
+			tivo_bcast.sin_port = htons(2190);
+		}
 	}
 #endif
 
@@ -1276,25 +1295,25 @@ main(int argc, char **argv)
 		/* select open sockets (SSDP, HTTP listen, and all HTTP soap sockets) */
 		FD_ZERO(&readset);
 
-		if (sssdp >= 0) 
+		if (sssdp >= 0)
 		{
 			FD_SET(sssdp, &readset);
 			max_fd = MAX(max_fd, sssdp);
 		}
-		
-		if (shttpl >= 0) 
+
+		if (shttpl >= 0)
 		{
 			FD_SET(shttpl, &readset);
 			max_fd = MAX(max_fd, shttpl);
 		}
 #ifdef TIVO_SUPPORT
-		if (sbeacon >= 0) 
+		if (sbeacon >= 0)
 		{
 			FD_SET(sbeacon, &readset);
 			max_fd = MAX(max_fd, sbeacon);
 		}
 #endif
-		if (smonitor >= 0) 
+		if (smonitor >= 0)
 		{
 			FD_SET(smonitor, &readset);
 			max_fd = MAX(max_fd, smonitor);
@@ -1427,7 +1446,7 @@ shutdown:
 #endif
 	if (smonitor >= 0)
 		close(smonitor);
-	
+
 	for (i = 0; i < n_lan_addr; i++)
 	{
 		SendSSDPGoodbyes(lan_addr[i].snotify);
@@ -1454,4 +1473,3 @@ shutdown:
 
 	exit(EXIT_SUCCESS);
 }
-

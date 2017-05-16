@@ -892,6 +892,16 @@ callback(void *args, int argc, char **argv, char **azColName)
 				if( strlen(title) > 23 )
 					title[23] = '\0';
 			}
+			/* Hyundai hack: Only titles with a media extension get recognized. */
+			else if( passed_args->client == EHyundaiTV )
+			{
+				ext = mime_to_ext(mime);
+				ret = asprintf(&alt_title, "%s.%s", title, ext);
+				if( ret > 0 )
+					title = alt_title;
+				else
+					alt_title = NULL;
+			}
 		}
 		else if( *mime == 'a' )
 		{
@@ -913,6 +923,9 @@ callback(void *args, int argc, char **argv, char **azColName)
 		}
 		else
 			dlna_flags |= DLNA_FLAG_TM_I;
+
+		if( passed_args->flags & FLAG_SKIP_DLNA_PN )
+		        dlna_pn = NULL;
 
 		if( dlna_pn )
 			snprintf(dlna_buf, sizeof(dlna_buf), "DLNA.ORG_PN=%s;"
