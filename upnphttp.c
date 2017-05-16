@@ -675,6 +675,11 @@ SendResp_presentation(struct upnphttp * h)
 						"background:" "#dddddd;"
 					"}"
 
+					"div.content {"
+						"margin:" "auto;"
+						"max-width:" "100em;"
+					"}"
+
 					"table {"
 						"width:" "100%%;"
 						"box-shadow:" "0 1px 3px rgba(0,0,0,0.2);"
@@ -715,7 +720,9 @@ SendResp_presentation(struct upnphttp * h)
 					"}"
 				"</STYLE>"
 			"</HEAD>"
-		"<BODY><div style=\"text-align: center\">"
+		"<BODY>"
+		"<div class=\"content\">"
+		"<div style=\"text-align: center\">"
 		"<h2>" SERVER_NAME " status</h2></div>");
 
 	strcatf(&str,
@@ -745,7 +752,7 @@ SendResp_presentation(struct upnphttp * h)
 	strcatf(&str, "</table>");
 
 	strcatf(&str, "<br>%d connection%s currently open<br>", number_of_children, (number_of_children == 1 ? "" : "s"));
-	strcatf(&str, "</BODY></HTML>\r\n");
+	strcatf(&str, "</div></BODY></HTML>\r\n");
 
 	BuildResp_upnphttp(h, str.data, str.off);
 	SendResp_upnphttp(h);
