@@ -88,7 +88,7 @@ get_video_packet(AVFormatContext *ctx, AVCodecContext *vctx,
 	int moreframes, decoded, finished;
 	int avret, i, j, l;
 
-	av_free_packet(pkt);
+	lav_free_packet(pkt);
 
 	finished = 0;
 	for (l = 0; !finished && l < 500; l++)
@@ -98,11 +98,12 @@ get_video_packet(AVFormatContext *ctx, AVCodecContext *vctx,
 		for (i = 0; moreframes && ! decoded && i < 2000; i++)
 		{
 			avret = av_read_frame(ctx, pkt);
+
 			if ((moreframes = (avret >= 0)))
 			{
 				if (!(decoded = (pkt->stream_index == vstream)))
 				{
-					av_free_packet(pkt);
+					lav_free_packet(pkt);
 					continue;
 				}
 
@@ -110,8 +111,13 @@ get_video_packet(AVFormatContext *ctx, AVCodecContext *vctx,
 				{
 					lav_frame_unref(frame);
 					avret = lav_avcodec_decode_video(vctx, frame, &finished, pkt);
-					if (avret < 0)
+					if (avret < 0) {
+						if(avret==AVERROR(EAGAIN)) {
+							break;
+						}
+						DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tofile: failed to decode video \n");
 						return 0;
+					}
 				}
 
 
@@ -131,8 +137,9 @@ video_seek(int seconds, AVFormatContext *ctx, AVCodecContext *vctx,
 	if (tstamp < 0)
 		tstamp = 0;
 
-	if ((av_seek_frame(ctx, -1, tstamp, 0) >=0))
-		avcodec_flush_buffers(ctx->streams[vstream]->codec);
+	if ((av_seek_frame(ctx, -1, tstamp, 0) >=0)) {
+		avcodec_flush_buffers(vctx);
+	}
 
 	return get_video_packet(ctx, vctx, pkt, frame, vstream);
 }
@@ -149,7 +156,7 @@ video_thumb_generate_tofile(const char *moviefname, const char *thumbfname, int 
 	start = clock();
 	memset(&img, 0, sizeof(image_s));
 
-	if ((video_thumb_generate_tobuff(moviefname, &img, seek, width, PIX_FMT_RGB32_1) < 0))
+	if ((video_thumb_generate_tobuff(moviefname, &img, seek, width, LAV_PIX_FMT_RGB32_1) < 0))
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tofile: unable to generate thumbnail to buffer! \n");
 		return -1;
@@ -180,6 +187,7 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	AVPacket packet;
 	AVCodecContext *vcctx = NULL;
 	AVCodec *vcodec = NULL;
+	AVDictionary *opts = NULL;
 	struct SwsContext *scctx = NULL;
 	int avret, i, vs, ret = -1;
 	int dwidth, dheight;
@@ -206,10 +214,9 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	vs = -1;
 	for (i =0; i<fctx->nb_streams; i++)
 	{
-		if (fctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+		if (fctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
 		{
 			vs = i;
-			vcctx = fctx->streams[vs]->codec;
 			break;
 		}
 	}
@@ -217,19 +224,33 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	if( vs < 0)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: unable to find a video stream \n");
-		return ret;
+		goto thumb_generate_error;
 	}
 
-	vcodec = avcodec_find_decoder(vcctx->codec_id);
+	vcodec = avcodec_find_decoder(fctx->streams[vs]->codecpar->codec_id);
 	if (!vcodec)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: unable to find a video decoder \n");
 		goto thumb_generate_error;
 	}
 
+	vcctx = avcodec_alloc_context3(vcodec);
+	if( !vcctx )
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: unable to allocate a video context \n");
+		goto thumb_generate_error;
+	}
+
+	if(avcodec_parameters_to_context(vcctx, fctx->streams[i]->codecpar) < 0)
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: unable to initialise video context \n");
+	}
+	av_codec_set_pkt_timebase(vcctx, fctx->streams[vs]->time_base);
+
+	av_dict_set(&opts, "refcounted_frames", "1", 0);
 	vcctx->workaround_bugs = 1;
 
-	avret =  lav_avcodec_open(vcctx, vcodec, NULL);
+	avret =  lav_avcodec_open(vcctx, vcodec, &opts);
 	if(avret < 0)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: unable to open a decoder \n");
@@ -253,7 +274,7 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	if (frame->interlaced_frame)
 	{
 		DPRINTF(E_DEBUG, L_METADATA, "video_thumb_generate_tobuff: got an interlaced video \n");
-		avpicture_deinterlace((AVPicture*) frame, (AVPicture*) frame,
+		lav_avpicture_deinterlace(frame, frame,
 					vcctx->pix_fmt, vcctx->width, vcctx->height);
 	}
 
@@ -267,7 +288,10 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 		goto thumb_generate_error;
 	}
 
-	avret = avpicture_alloc((AVPicture*)scframe, pixfmt, dwidth, dheight);
+	scframe->format = pixfmt;
+	scframe->width = dwidth;
+	scframe->height = dheight;
+	avret = av_frame_get_buffer(scframe, calc_ptr_alignment(scframe));
 	if (avret < 0)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: malloc error!! Unable to alloc memory for the scaled frame buffer \n");
@@ -286,6 +310,7 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 			scframe->data, scframe->linesize);
 	if (avret <= 0)
 	{
+
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: Unable to scale thumbnail! \n");
 		goto thumb_generate_error;
 	}
@@ -305,12 +330,12 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	ret = 0;
 
 thumb_generate_error:
+	avcodec_free_context(&vcctx);
 	sws_freeContext(scctx);
-	avpicture_free((struct AVPicture*)scframe);
-	av_free(scframe);
-	av_free_packet(&packet);
-	av_free(frame);
-	avcodec_close(vcctx);
+	lav_frame_unref(scframe);
+	av_dict_free(&opts);
+	lav_free_packet(&packet);
+	lav_frame_unref(frame);
 
 	return ret;
 }
@@ -462,7 +487,7 @@ video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack
 #ifdef ENABLE_VIDEO_THUMB
 		if ( !allblack && fctx)
 		{
-			res = video_thumb_generate_ctx_tobuff(fctx, &img, per[i], MTA_WIDTH, PIX_FMT_RGB32_1);
+			res = video_thumb_generate_ctx_tobuff(fctx, &img, per[i], MTA_WIDTH, LAV_PIX_FMT_RGB32_1);
 			if (img.buf)
 			{
 				jpeg = image_save_to_jpeg_buf(&img, &jpegsize);
