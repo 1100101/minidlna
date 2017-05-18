@@ -632,28 +632,6 @@ IsMediaPath(const char * path)
   return 0;
 }
 
-
-
-static void RemoveFromDB(const char * id)
-{
-   char * path = NULL;
-   path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = "
-                                        "(SELECT DETAIL_ID from OBJECTS WHERE OBJECT_ID = '%q')", id);
-   if(path)
-   {
-     DPRINTF(E_DEBUG, L_INOTIFY, "ParentPath: '%s'\n", path);
-     if(!IsMediaPath(path))
-     {
-       DPRINTF(E_DEBUG, L_INOTIFY, "%s is a not virtual folder, removing\n", path);
-       sql_exec(db, "DELETE from DETAILS where ID ="
-                    " (SELECT DETAIL_ID from OBJECTS where OBJECT_ID = '%s')", id);
-       sql_exec(db, "DELETE from OBJECTS where OBJECT_ID = '%s'", id);
-     }
-
-     free(path);
-   }
-}
-
 int
 monitor_remove_directory(int fd, const char * path)
 {
