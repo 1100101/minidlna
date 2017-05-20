@@ -110,6 +110,22 @@ int art_cache_rename_nftw_renamer(
 	if(rename(old_cache_file, new_cache_file)) {
 		DPRINTF(E_DEBUG, L_GENERAL, "rename failed: %s (%d)\n", strerror(errno), errno);
 	}
+	else {
+		// Update database, too
+		int ret = 0;
+
+		ret = sql_exec(db, "UPDATE ALBUM_ART SET PATH = '%q' WHERE PATH = '%q'", new_cache_file, old_cache_file);
+		if(SQLITE_OK != ret)
+		{
+			DPRINTF(E_WARN, L_METADATA, "Error renaming ALBUM_ART date base entry for '%s': %d\n", old_cache_file, ret);
+		}
+
+		ret = sql_exec(db, "UPDATE DETAILS SET PATH = '%q' WHERE PATH = '%q'", fpath, old_fpath);
+		if(SQLITE_OK != ret)
+		{
+			DPRINTF(E_WARN, L_METADATA, "Error renaming DETAILS date base entry for '%s': %d\n", old_fpath, ret);
+		}
+	}
 
 	free(old_cache_file);
 	free(new_cache_file);

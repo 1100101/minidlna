@@ -254,6 +254,28 @@ inotify_remove_watches(int fd)
 }
 #endif
 
+void art_cache_cleanup(const char* path) {
+	char* cache_file = NULL;
+
+#ifdef ENABLE_VIDEO_THUMB
+	/* Remove video thumbnails */
+	if(art_cache_path(".jpg", path, &cache_file))
+	{
+		if(!remove(cache_file))
+			DPRINTF(E_DEBUG, L_INOTIFY, "Removed video thumbnail (%s).\n", cache_file);
+		free(cache_file);
+	}
+#endif
+
+	if(art_cache_path(".mta", path, &cache_file))
+	{
+		sql_exec(db, "DELETE from MTA where PATH = '%q'", cache_file);
+		if(!remove(cache_file))
+			DPRINTF(E_DEBUG, L_INOTIFY, "Removed MTA data (%s).\n", cache_file);
+		free(cache_file);
+	}
+}
+
 int
 monitor_remove_file(const char * path)
 {
@@ -326,24 +348,7 @@ monitor_remove_file(const char * path)
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
 	}
 
-	char* cache_file = NULL;
-#ifdef ENABLE_VIDEO_THUMB
-	/* Remove video thumbnails */
-	if(art_cache_path(".jpg", path, &cache_file))
-	{
-		DPRINTF(E_DEBUG, L_INOTIFY, "Removing video thumbnail (%s).\n", cache_file);
-		remove(cache_file);
-		free(cache_file);
-	}
-#endif
-
-	if(art_cache_path(".mta", path, &cache_file))
-	{
-		DPRINTF(E_DEBUG, L_INOTIFY, "Removing MTA data (%s).\n", cache_file);
-		sql_exec(db, "DELETE from MTA where PATH = '%q'", cache_file);
-		remove(cache_file);
-		free(cache_file);
-	}
+	art_cache_cleanup(path);
 
 	return 0;
 }
@@ -651,25 +656,25 @@ monitor_remove_directory(int fd, const char * path)
 		remove_watch(fd, path);
 		#endif
 	}
-	sql = sqlite3_mprintf("SELECT ID from DETAILS where (PATH > '%q/' and PATH <= '%q/%c')"
+	sql = sqlite3_mprintf("SELECT ID, PATH"
+	                      " from DETAILS where (PATH > '%q/' and PATH <= '%q/%c')"
 	                      " or PATH = '%q'", path, path, 0xFF, path);
 	if( (sql_get_table(db, sql, &result, &rows, NULL) == SQLITE_OK) )
 	{
-		if( rows )
+		for(i=2; i <= 2*rows; i+=2) // x2 since we've asked for 2 columns
 		{
-			for( i=1; i <= rows; i++ )
-			{
-				detailID = strtoll(result[i], NULL, 10);
-				sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
-				sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
-			}
-			ret = 0;
+			detailID = strtoll(result[i], NULL, 10);
+			sql_exec(db, "DELETE from ALBUM_ART where ID = (SELECT ALBUM_ART from DETAILS where ID = %lld)", detailID);
+			sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
+			sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
+			art_cache_cleanup(result[i+1]);
 		}
+		ret = 0;
 		sqlite3_free_table(result);
 	}
 	sqlite3_free(sql);
 	/* Clean up any album art entries in the deleted directory */
-	sql_exec(db, "DELETE from ALBUM_ART where (PATH > '%q/' and PATH <= '%q/%c')", path, path, 0xFF);
+	sql_exec(db, "DELETE from ALBUM_ART where (PATH > '%q/' and PATH <= '%q/%c' or PATH = '%q')", path, path, 0xFF, path);
 
 	return ret;
 }
