@@ -78,6 +78,7 @@
 #include "log.h"
 #include "video_thumb.h"
 #include "utils.h"
+#include "albumart.h"
 
 
 #ifdef ENABLE_VIDEO_THUMB
@@ -425,7 +426,7 @@ video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack
 #endif
 	image_s img;
 	FILE *fp = NULL;
-	char *mta_path, *mta_dir;
+	char *mta_path;
 	char *img64 = NULL;
 	size_t sizei64;
 	int i, res, ret = -1;
@@ -445,24 +446,13 @@ video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack
 
 	start = clock();
 
-	res = xasprintf(&mta_path, "%s/art_cache%s.mta", db_path, moviefname);
-	if ( res < 0 )
-		return 0;
-
-	if ( !access(mta_path, F_OK) )
+	if(art_cache_exists(".mta", moviefname, &mta_path))
 	{
 		DPRINTF(E_INFO, L_METADATA, "The MTA file (%s) already exists.", mta_path);
 		return mta_path;
 	}
 
-	res = xasprintf(&mta_dir, "%s/art_cache%s.mta", db_path, moviefname);
-	if ( res < 0 )
-	{
-		mta_dir = NULL;
-		goto mta_error;
-	}
-
-	if ( make_dir(dirname(mta_dir), S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) )
+	if ( make_dir(dirname(mta_path), S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) )
 		goto mta_error;
 
 	if ( !(fp = fopen(mta_path, "w")) )
@@ -532,7 +522,6 @@ mta_error:
 		lav_close(fctx);
 #endif
 	fclose(fp);
-	free(mta_dir);
 	if (ret)
 	{
 		remove(mta_path);

@@ -29,6 +29,7 @@
 #include <libgen.h>
 #include <setjmp.h>
 #include <errno.h>
+#include <ftw.h>
 
 #include <jpeglib.h>
 
@@ -41,15 +42,89 @@
 #include "video_thumb.h"
 #include "log.h"
 
-static int
-art_cache_exists(const char *orig_path, char **cache_file)
+int
+art_cache_path(const char* postfix, const char *orig_path, char **cache_file)
 {
-	if( xasprintf(cache_file, "%s/art_cache%s", db_path, orig_path) < 0 )
+	unsigned int hash = DJBHash((uint8_t*)orig_path, strlen(orig_path));
+	#ifdef DEBUG
+	const char *fname = strrchr(orig_path, '/');
+	if(!fname) fname = orig_path; else ++fname;
+	if( xasprintf(cache_file, "%s/art_cache/%08x (%s)%s", db_path, hash, fname, postfix) < 0 )
+	#else
+	if( xasprintf(cache_file, "%s/art_cache/%08x%s", db_path, hash, postfix) < 0 )
+	#endif
 		return 0;
 
-	strcpy(strchr(*cache_file, '\0')-4, ".jpg");
+	return 1;
+}
 
+int
+art_cache_exists(const char* postfix, const char *orig_path, char **cache_file)
+{
+	if(!art_cache_path(postfix, orig_path, cache_file))
+		return 0;
 	return (!access(*cache_file, F_OK));
+}
+
+
+const char* art_cache_rename_nftw_renamer_old_path;
+int art_cache_rename_nftw_renamer(
+	const char *fpath,
+	const struct stat *sb,
+	int typeflag,
+	struct FTW *ftwbuf
+) {
+	if( typeflag & FTW_DP ) { // directory
+		return 0;
+	}
+
+	// If ftwbuf->level is 0, it means that we were passed file, instead of a
+	// directory. Therefor we don't need to 'construct' the old filename, it's
+	// already there.
+	// Note that in the case of a directory rename all file names remain the
+	// same (so we can construct the old name from the old path), but in a the
+	// case of renamed file, the file itself has a different name.
+	const char* old_fpath = NULL;
+	char buffer[PATH_MAX] = {};
+	if(ftwbuf->level) {
+		const char* fname = fpath + ftwbuf->base;
+		snprintf(buffer, sizeof(buffer), "%s/%s", art_cache_rename_nftw_renamer_old_path, fname);
+		old_fpath = buffer;
+	}
+	else {
+		old_fpath = art_cache_rename_nftw_renamer_old_path;
+	}
+
+	char* old_cache_file = NULL;
+	if(!art_cache_path(".jpg", old_fpath, &old_cache_file)) {
+		return 0;
+	}
+
+	char* new_cache_file = NULL;
+	if(!art_cache_path(".jpg", fpath, &new_cache_file)) {
+		free(old_cache_file);
+		return 0;
+	}
+
+	DPRINTF(E_DEBUG, L_GENERAL, "rename for\n '%s' ('%s') -->\n '%s' ('%s')\n", old_fpath, old_cache_file, fpath, new_cache_file);
+	if(rename(old_cache_file, new_cache_file)) {
+		DPRINTF(E_DEBUG, L_GENERAL, "rename failed: %s (%d)\n", strerror(errno), errno);
+	}
+
+	free(old_cache_file);
+	free(new_cache_file);
+
+	return 0;
+}
+
+int
+art_cache_rename(const char * oldpath, const char * newpath)
+{
+	// i.e. not thread safe
+	art_cache_rename_nftw_renamer_old_path = oldpath;
+	// StackOverflow says 15 is a good number of file descriptors:
+	// http://stackoverflow.com/questions/8436841/how-to-recursively-list-directories-in-c-on-linux
+	return nftw(newpath, art_cache_rename_nftw_renamer, 15, 0);
 }
 
 static char *
@@ -63,7 +138,7 @@ save_resized_album_art(image_s *imsrc, const char *path)
 	if( !imsrc )
 		return NULL;
 
-	if( art_cache_exists(path, &cache_file) )
+	if( art_cache_exists(".jpg", path, &cache_file) )
 		return cache_file;
 
 	strncpyt(cache_dir, cache_file, sizeof(cache_dir));
@@ -184,7 +259,7 @@ check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 	{
 		if( !last_success )
 			return NULL;
-		art_cache_exists(path, &art_path);
+		art_cache_exists(".jpg", path, &art_path);
 		if( link(last_path, art_path) == 0 )
 		{
 			return(art_path);
@@ -222,7 +297,7 @@ check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 	else if( width > 0 && height > 0 )
 	{
 		size_t nwritten;
-		if( art_cache_exists(path, &art_path) )
+		if( art_cache_exists(".jpg", path, &art_path) )
 			goto end_art;
 		cache_dir = strdup(art_path);
 		make_dir(dirname(cache_dir), S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
@@ -310,7 +385,7 @@ check_for_album_file(const char *path)
 	}
 	if( ret == 0 )
 	{
-		if( art_cache_exists(file, &art_file) )
+		if( art_cache_exists(".jpg", file, &art_file) )
 			goto existing_file;
 		free(art_file);
 		imsrc = image_new_from_jpeg(file, 1, NULL, 0, 1, ROTATE_NONE);
@@ -324,7 +399,7 @@ check_dir:
 		snprintf(file, sizeof(file), "%s/%s", dir, album_art_name->name);
 		if( access(file, R_OK) == 0 )
 		{
-			if( art_cache_exists(file, &art_file) )
+			if( art_cache_exists(".jpg", file, &art_file) )
 			{
 existing_file:
 				return art_file;
@@ -354,7 +429,7 @@ generate_thumbnail(const char * path)
 	char *tfile = NULL;
 	char cache_dir[MAXPATHLEN];
 
-	if( art_cache_exists(path, &tfile) )
+	if( art_cache_exists(".jpg", path, &tfile) )
 		return tfile;
 
 	memset(&cache_dir, 0, sizeof(cache_dir));

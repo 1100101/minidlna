@@ -258,7 +258,6 @@ int
 monitor_remove_file(const char * path)
 {
 	char sql[128];
-	char art_cache[PATH_MAX];
 	char *id;
 	char *ptr;
 	char **result;
@@ -326,21 +325,25 @@ monitor_remove_file(const char * path)
 		sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
 	}
-	snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s", db_path, path);
 
+	char* cache_file = NULL;
 #ifdef ENABLE_VIDEO_THUMB
 	/* Remove video thumbnails */
-	if ( is_video(path) )
+	if(art_cache_path(".jpg", path, &cache_file))
 	{
-		char *vthumb = art_cache;
-		strcpy(strchr(vthumb, '\0')-4, ".jpg");
+		DPRINTF(E_DEBUG, L_INOTIFY, "Removing video thumbnail (%s).\n", cache_file);
+		remove(cache_file);
+		free(cache_file);
 	}
 #endif
-	remove(art_cache);
 
-	snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s.mta", db_path, path);
-	sql_exec(db, "DELETE from MTA where PATH = '%q'", art_cache);
-	remove(art_cache);
+	if(art_cache_path(".mta", path, &cache_file))
+	{
+		DPRINTF(E_DEBUG, L_INOTIFY, "Removing MTA data (%s).\n", cache_file);
+		sql_exec(db, "DELETE from MTA where PATH = '%q'", cache_file);
+		remove(cache_file);
+		free(cache_file);
+	}
 
 	return 0;
 }
@@ -683,7 +686,7 @@ start_inotify(void)
 	char * esc_name = NULL;
 	struct stat st;
 #ifdef ENABLE_VIDEO_THUMB
-	char renpath_buf[PATH_MAX];
+	char renpath_buf[PATH_MAX] = {};
 	int cookie = 0;
 #endif
 	sigset_t set;
@@ -752,18 +755,39 @@ start_inotify(void)
 				}
 				esc_name = modifyString(strdup(event->name), "&", "&amp;amp;", 0);
 				snprintf(path_buf, sizeof(path_buf), "%s/%s", get_path_from_wd(event->wd), event->name);
+#ifdef ENABLE_VIDEO_THUMB
+				DPRINTF(E_DEBUG, L_INOTIFY,  "%s '%s' was %s (%x).\n",
+					path_buf,
+					(event->mask & IN_ISDIR     ) ? "directory" : "file",
+					(event->mask & IN_MOVED_TO  ) ? "moved here" :
+					(event->mask & IN_MOVED_FROM) ? "moved away" :
+					(event->mask & IN_DELETE    ) ? "deleted" :
+					(event->mask & IN_CREATE    ) ? "created" :
+					(event->mask & IN_CLOSE     ) ? "closed" :
+					"other",
+					event->mask
+				);
+				/* We do not want to regenerate the thumbnails if renaming a directory. */
+				if (event->cookie == cookie && event->mask & IN_MOVED_TO)
+				{
+					DPRINTF(E_DEBUG, L_INOTIFY, "Detected rename: '%s' -> '%s'\n", renpath_buf+1, path_buf);
+					art_cache_rename(renpath_buf+1, path_buf);
+				}
+				else if(renpath_buf[0]) { // check for delayed action
+					DPRINTF(E_DEBUG, L_INOTIFY, "Delayed delete for: '%s'\n", renpath_buf+1);
+					if( renpath_buf[0] == 'd' )
+					{
+						monitor_remove_directory(pollfds[0].fd, renpath_buf+1);
+					}
+					else
+						monitor_remove_file(renpath_buf+1);
+				}
+				// Clear any delayed action (either it was a rename, or it has been
+				// executed just now)
+				renpath_buf[0] = 0;
+#endif
 				if ( event->mask & IN_ISDIR && (event->mask & (IN_CREATE|IN_MOVED_TO)) )
 				{
-					DPRINTF(E_DEBUG, L_INOTIFY,  "The directory %s was %s.\n",
-						path_buf, (event->mask & IN_MOVED_TO ? "moved here" : "created"));
-#ifdef ENABLE_VIDEO_THUMB
-					/* We do not want to regenerate the thumbnails if renaming a directory. */
-					if (event->cookie == cookie && event->mask & IN_MOVED_TO)
-					{
-						DPRINTF(E_DEBUG, L_INOTIFY, "Directory rename: %s -> %s \n", renpath_buf, path_buf);
-						rename_artcache_dir(renpath_buf, path_buf);
-					}
-#endif
 					monitor_insert_directory(pollfds[0].fd, esc_name, path_buf);
 				}
 				else if ( (event->mask & (IN_CLOSE_WRITE|IN_MOVED_TO|IN_CREATE)) &&
@@ -792,22 +816,27 @@ start_inotify(void)
 				}
 				else if ( event->mask & (IN_DELETE|IN_MOVED_FROM) )
 				{
-					DPRINTF(E_INFO, L_INOTIFY, "The %s %s was %s.\n",
-						(event->mask & IN_ISDIR ? "directory" : "file"),
-						path_buf, (event->mask & IN_MOVED_FROM ? "moved away" : "deleted"));
+#ifdef ENABLE_VIDEO_THUMB
+					if ( event->mask & IN_MOVED_FROM )
+					{
+						// action will be taken on the next event
+						// this is to avoid deleting and having to regenerate thumbnails
+						// in case of just a rename.
+						strncpy(renpath_buf+1, path_buf, sizeof(renpath_buf)-1);
+						renpath_buf[0] = (event->mask & IN_ISDIR) ? 'd' : 'f';
+						cookie = event->cookie;
+					}
+					else {
+#endif
 					if ( event->mask & IN_ISDIR )
 					{
-#ifdef ENABLE_VIDEO_THUMB
-						if ( event->mask & IN_MOVED_FROM )
-						{
-							strncpy(renpath_buf, path_buf, sizeof(renpath_buf));
-							cookie = event->cookie;
-						}
-#endif
 						monitor_remove_directory(pollfds[0].fd, path_buf);
 					}
 					else
 						monitor_remove_file(path_buf);
+#ifdef ENABLE_VIDEO_THUMB
+					}
+#endif
 				}
 				free(esc_name);
 			}
@@ -815,7 +844,17 @@ start_inotify(void)
 		}
 	}
 	inotify_remove_watches(pollfds[0].fd);
+
 quitting:
+	if(renpath_buf[0]) {
+		DPRINTF(E_DEBUG, L_INOTIFY, "Delayed delete for: '%s'\n", renpath_buf+1);
+		if( renpath_buf[0] == 'd' )
+		{
+			monitor_remove_directory(pollfds[0].fd, renpath_buf+1);
+		}
+		else
+			monitor_remove_file(renpath_buf+1);
+	}
 	close(pollfds[0].fd);
 
 	return 0;

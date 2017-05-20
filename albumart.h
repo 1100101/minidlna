@@ -26,5 +26,8 @@
 
 void update_if_album_art(const char *path);
 int64_t find_album_art(const char *path, uint8_t *image_data, int image_size);
+int art_cache_path(const char* postfix, const char *orig_path, char **cache_file);
+int art_cache_exists(const char* postfix, const char *orig_path, char **cache_file);
+int art_cache_rename(const char * oldpath, const char * newpath);
 
 #endif

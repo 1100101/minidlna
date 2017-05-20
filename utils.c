@@ -319,7 +319,7 @@ make_dir(char * path, mode_t mode)
 
 /* Simple, efficient hash function from Daniel J. Bernstein */
 unsigned int
-DJBHash(uint8_t *data, int len)
+DJBHash(const uint8_t *data, int len)
 {
 	unsigned int hash = 5381;
 	unsigned int i = 0;
@@ -575,20 +575,6 @@ resolve_unknown_type(const char * path, media_types dir_type)
 	}
 	return type;
 }
-
-#ifdef ENABLE_VIDEO_THUMB
-int
-rename_artcache_dir(const char * oldpath, const char * newpath)
-{
-	char old_artcache[PATH_MAX];
-	char new_artcache[PATH_MAX];
-
-	snprintf(old_artcache, sizeof(old_artcache), "%s/art_cache%s", db_path, oldpath);
-	snprintf(new_artcache, sizeof(old_artcache), "%s/art_cache%s", db_path, newpath);
-
-	return rename(old_artcache, new_artcache);
-}
-#endif
 
 char*
 base64_encode(const unsigned char *data, size_t ilen, size_t *olen)
