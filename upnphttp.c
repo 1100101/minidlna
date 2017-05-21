@@ -818,7 +818,7 @@ DoMediaScan(struct upnphttp * h, int rebuild_db)
 		if(rebuild_db) {
 			db_clear(db);
 			if(CreateDatabase() != 0) {
-				DPRINTF(E_FATAL, L_DB_SQL, "ERROR: Failed to create sqlite database!\n");
+				DPRINTF(E_FATAL, L_HTTP, "ERROR: Failed to create sqlite database!\n");
 			}
 		}
 		rescan_db = !rebuild_db;
