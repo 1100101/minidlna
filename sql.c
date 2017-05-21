@@ -1,5 +1,5 @@
 /* MiniDLNA media server
- * Copyright (C) 2008-2009  Justin Maggard
+ * Copyright (C) 2008-2017  Justin Maggard
  *
  * This file is part of MiniDLNA.
  *
@@ -95,10 +95,10 @@ sql_get_int_field(sqlite3 *db, const char *fmt, ...)
 	for (counter = 0;
 	     ((result = sqlite3_step(stmt)) == SQLITE_BUSY || result == SQLITE_LOCKED) && counter < 2;
 	     counter++) {
-		 /* While SQLITE_BUSY has a built in timeout,
-		    SQLITE_LOCKED does not, so sleep */
-		 if (result == SQLITE_LOCKED)
-		 	sleep(1);
+		/* While SQLITE_BUSY has a built in timeout,
+		 * SQLITE_LOCKED does not, so sleep */
+		if (result == SQLITE_LOCKED)
+			sleep(1);
 	}
 
 	switch (result)
@@ -119,7 +119,7 @@ sql_get_int_field(sqlite3 *db, const char *fmt, ...)
 			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %d - %s\n%s\n", __func__, result, sqlite3_errmsg(db), sql);
 			ret = -1;
 			break;
- 	}
+	}
 	sqlite3_free(sql);
 	sqlite3_finalize(stmt);
 
@@ -154,10 +154,10 @@ sql_get_int64_field(sqlite3 *db, const char *fmt, ...)
 	for (counter = 0;
 	     ((result = sqlite3_step(stmt)) == SQLITE_BUSY || result == SQLITE_LOCKED) && counter < 2;
 	     counter++) {
-		 /* While SQLITE_BUSY has a built in timeout,
-		    SQLITE_LOCKED does not, so sleep */
-		 if (result == SQLITE_LOCKED)
-		 	sleep(1);
+		/* While SQLITE_BUSY has a built in timeout,
+		 * SQLITE_LOCKED does not, so sleep */
+		if (result == SQLITE_LOCKED)
+			sleep(1);
 	}
 
 	switch (result)
@@ -178,7 +178,7 @@ sql_get_int64_field(sqlite3 *db, const char *fmt, ...)
 			DPRINTF(E_WARN, L_DB_SQL, "%s: step failed: %d - %s\n%s\n", __func__, result, sqlite3_errmsg(db), sql);
 			ret = -1;
 			break;
- 	}
+	}
 	sqlite3_free(sql);
 	sqlite3_finalize(stmt);
 
@@ -290,6 +290,7 @@ int
 db_upgrade(sqlite3 *db)
 {
 	int db_vers;
+	int ret;
 
 	db_vers = sql_get_int_field(db, "PRAGMA user_version");
 
@@ -301,6 +302,13 @@ db_upgrade(sqlite3 *db)
 		return -1;
 	if (db_vers < 9)
 		return db_vers;
+	if (db_vers < 10)
+	{
+		DPRINTF(E_WARN, L_DB_SQL, "Updating DB version to v%d\n", 10);
+		ret = sql_exec(db, "ALTER TABLE BOOKMARKS ADD WATCH_COUNT INTEGER");
+		if (ret != SQLITE_OK)
+			return 9;
+	}
 	sql_exec(db, "PRAGMA user_version = %d", DB_VERSION);
 
 	return 0;

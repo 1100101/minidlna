@@ -1,5 +1,5 @@
 /* MiniDLNA media server
- * Copyright (C) 2013  NETGEAR
+ * Copyright (C) 2013-2017  NETGEAR
  *
  * This file is part of MiniDLNA.
  *
@@ -79,6 +79,8 @@ enum client_types {
 	EAsusOPlay,
 	EBubbleUPnP,
 	ENetFrontLivingConnect,
+	EKodi,
+	EMovian,
 	EStandardDLNA150,
 	EStandardUPnP
 };

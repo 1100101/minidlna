@@ -1,5 +1,5 @@
 /* MiniDLNA media server
- * Copyright (C) 2013  NETGEAR
+ * Copyright (C) 2013-2017  NETGEAR
  *
  * This file is part of MiniDLNA.
  *
@@ -251,6 +251,20 @@ struct client_type_s client_types[] =
 	  FLAG_CAPTION_RES,
 	  "BubbleUPnP",
 	  "BubbleUPnP",
+	  EUserAgent
+	},
+
+	{ EMovian,
+	  FLAG_CAPTION_RES,
+	  "Movian",
+	  "Movian",
+	  EUserAgent
+	},
+
+	{ EKodi,
+	  FLAG_DLNA | FLAG_MIME_AVI_AVI | FLAG_CAPTION_RES,
+	  "Kodi",
+	  "Kodi",
 	  EUserAgent
 	},
 
