@@ -817,6 +817,10 @@ DoMediaScan(struct upnphttp * h, int rebuild_db)
 	if(!scanning) {
 		if(rebuild_db) {
 			db_clear(db);
+			char cmd[PATH_MAX*2];
+			snprintf(cmd, sizeof(cmd), "rm -rf %s/art_cache", db_path);
+			if (system(cmd) != 0)
+				DPRINTF(E_WARN, L_HTTP, "Failed to clean art cache!\n");
 			if(CreateDatabase() != 0) {
 				DPRINTF(E_FATAL, L_HTTP, "ERROR: Failed to create sqlite database!\n");
 			}
