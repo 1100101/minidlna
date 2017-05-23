@@ -786,14 +786,14 @@ image_resize(const image_s *src_image, int32_t width, int32_t height)
 {
 	image_s * dst_image;
 
-	if ((src_image->width == width) && (src_image->height == height))
-		return (image_s*)src_image;
-
 	dst_image = image_new(width, height);
 	if( !dst_image )
 		return NULL;
 
-	if( (src_image->width < width) || (src_image->height < height) )
+
+	/**/ if( (src_image->width == width) && (src_image->height == height) )
+		memcpy(dst_image->buf, src_image->buf, sizeof(pix) * width * height);
+	else if( (src_image->width  < width) || (src_image->height  < height) )
 		image_upsize(dst_image, src_image, width, height);
 	else
 		image_downsize(dst_image, src_image, width, height);
