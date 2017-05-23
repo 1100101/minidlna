@@ -181,17 +181,72 @@ video_thumb_generate_tofile(const char *moviefname, const char *thumbfname, int 
 }
 
 #ifdef ENABLE_VIDEO_THUMB
+static AVFrame*
+video_thumb_swscale_frame(AVFrame *frame, int width, enum AVPixelFormat pixfmt)
+{
+	AVFrame *scframe = NULL;
+	struct SwsContext *scctx = NULL;
+	int dwidth, dheight, avret;
+
+	if(!frame) return NULL;
+
+	dwidth = width;
+	dheight = (int) ((float) (width * frame->height) / frame->width );
+
+	scframe = lav_frame_alloc();
+	if (!scframe)
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_swscale_frame: malloc error!! Unable to alloc memory for the scaled frame \n");
+		avret = -1;
+		goto rescale_error;
+	}
+
+	scframe->format = pixfmt;
+	scframe->width = dwidth;
+	scframe->height = dheight;
+	avret = av_frame_get_buffer(scframe, calc_ptr_alignment(scframe));
+	if (avret < 0)
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_swscale_frame: malloc error!! Unable to alloc memory for the scaled frame buffer \n");
+		goto rescale_error;
+	}
+
+	scctx = sws_getCachedContext(scctx,
+		frame->width, frame->height, frame->format,
+		scframe->width, scframe->height, scframe->format,
+		SWS_BICUBIC, NULL, NULL, NULL);
+	if (!scctx)
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_swscale_frame: Unable to get a scale context! \n");
+		avret = -1;
+		goto rescale_error;
+	}
+
+	avret = sws_scale(scctx, (const uint8_t * const*)frame->data, frame->linesize, 0, frame->height,
+			scframe->data, scframe->linesize);
+
+	rescale_error:
+		sws_freeContext(scctx);
+
+	if (avret <= 0)
+	{
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_swscale_frame: Unable to scale thumbnail! \n");
+		return NULL;
+	}
+
+	return scframe;
+}
+
+
 static int
 video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek, int width, enum AVPixelFormat pixfmt)
 {
-	AVFrame *frame = NULL, *scframe = NULL;
+	AVFrame *frame = NULL;
 	AVPacket packet;
 	AVCodecContext *vcctx = NULL;
 	AVCodec *vcodec = NULL;
 	AVDictionary *opts = NULL;
-	struct SwsContext *scctx = NULL;
 	int avret, i, vs, ret = -1;
-	int dwidth, dheight;
 	image_s* buffer = (image_s*) imgbuffer;
 
 	if (!fctx)
@@ -204,11 +259,6 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 		seek = 0;
 	else if (seek > 90)
 		seek = 90;
-
-	if (width < 64)
-		width = 64;
-	else if (width > 480)
-		width = 480;
 
 	av_init_packet(&packet);
 
@@ -279,61 +329,39 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 					vcctx->pix_fmt, vcctx->width, vcctx->height);
 	}
 
-	dwidth = width;
-	dheight = (int) ((float) (width * vcctx->height) / vcctx->width );
-
-	scframe = lav_frame_alloc();
-	if (!scframe)
-	{
-		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: malloc error!! Unable to alloc memory for the scaled frame \n");
-		goto thumb_generate_error;
+	// We always need to scale, even if just to convert the image format from
+	// YUV or other to the target pixfmt.
+	if(!width) {
+		width = vcctx->width;
 	}
+	else if (width < 64)
+		width = 64;
+	else if (width > 480)
+		width = 480;
+	AVFrame* scframe = video_thumb_swscale_frame(frame, width, pixfmt);
+	if(!scframe) goto thumb_generate_error;
+	lav_frame_unref(frame);
+	frame = scframe;
 
-	scframe->format = pixfmt;
-	scframe->width = dwidth;
-	scframe->height = dheight;
-	avret = av_frame_get_buffer(scframe, calc_ptr_alignment(scframe));
-	if (avret < 0)
-	{
-		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: malloc error!! Unable to alloc memory for the scaled frame buffer \n");
-		goto thumb_generate_error;
-	}
-
-	scctx = sws_getCachedContext(scctx, vcctx->width, vcctx->height, vcctx->pix_fmt,
-					dwidth, dheight, pixfmt, SWS_BICUBIC, NULL, NULL, NULL);
-	if (!scctx)
-	{
-		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: Unable to get a scale context! \n");
-		goto thumb_generate_error;
-	}
-
-	avret = sws_scale(scctx, (const uint8_t * const*)frame->data, frame->linesize, 0, vcctx->height,
-			scframe->data, scframe->linesize);
-	if (avret <= 0)
-	{
-
-		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: Unable to scale thumbnail! \n");
-		goto thumb_generate_error;
-	}
-
+	// Copy to output
 	free(buffer->buf);
-	buffer->buf = (pix*) malloc(sizeof(uint8_t) * scframe->linesize[0] * dheight);
+	// x4 for PIXFMT_RGBA
+	buffer->buf = (pix*) malloc(sizeof(uint8_t) * frame->linesize[0] * frame->height * 4);
 	if(!buffer->buf)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: malloc error!! Unable to alloc memory to buffer the picture \n");
 		goto thumb_generate_error;
 	}
 
-	buffer->width = dwidth;
-	buffer->height = dheight;
-	memcpy(buffer->buf, scframe->data[0], scframe->linesize[0] * buffer->height);
+	buffer->width = frame->width;
+	buffer->height = frame->height;
+	memcpy(buffer->buf, frame->data[0], frame->linesize[0] * buffer->height);
+	DPRINTF(E_DEBUG, L_METADATA, "video_thumb_generate_tobuff: buffer->width: %d, buffer->height: %d\n", buffer->width, buffer->height);
 
 	ret = 0;
 
 thumb_generate_error:
 	avcodec_free_context(&vcctx);
-	sws_freeContext(scctx);
-	lav_frame_unref(scframe);
 	av_dict_free(&opts);
 	lav_free_packet(&packet);
 	lav_frame_unref(frame);
