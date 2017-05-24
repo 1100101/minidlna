@@ -105,8 +105,11 @@ raise_watch_limit(unsigned int limit)
 	if (!max_watches)
 		return;
 	if (!limit)
-		fscanf(max_watches, "%u", &limit);
-	fprintf(max_watches, "%u", next_highest(limit));
+		if(fscanf(max_watches, "%u", &limit)==1)
+		{
+			DPRINTF(E_INFO, L_INOTIFY, "raising watch limit: %d --> %d\n", limit, next_highest(limit));
+			fprintf(max_watches, "%u", next_highest(limit));
+		}
 	fclose(max_watches);
 }
 

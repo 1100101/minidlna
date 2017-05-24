@@ -296,7 +296,7 @@ ParseHttpHeaders(struct upnphttp * h)
 					}
 
  					DPRINTF(E_DEBUG, L_HTTP, "Range Start-End: %lld - %lld\n",
-						(long long)h->req_RangeStart, h->req_RangeEnd);
+						(long long)h->req_RangeStart, (long long)h->req_RangeEnd);
  				}
 			}
 			else if(strncasecmp(line, "Host", 4)==0)

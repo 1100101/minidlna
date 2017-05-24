@@ -102,5 +102,6 @@ unsigned int DJBHash(const uint8_t *data, int len);
 extern const char* subtitle_formats[];
 int copy_file(const char *src_file, const char *dst_file);
 int link_file(const char *src_file, const char *dst_file);
+#define IGNORE_RETURN_VALUE(...) if(__VA_ARGS__);
 
 #endif

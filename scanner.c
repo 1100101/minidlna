@@ -837,9 +837,11 @@ char* GetParentID(struct media_dir_s * media_path) {
   if(media_path->vfolder != NULL) {
     startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
     insert_directory(media_path->vfolder, media_path->path, BROWSEDIR_ID, "", startID);
-    asprintf(&parent_id, "%s$%X", "", startID);
-    DPRINTF(E_DEBUG, L_SCANNER, _("[GetParentID] vfolder=%s, startID=%d, parent_id=%s\n"),
-            media_path->vfolder, startID, parent_id);
+    if(asprintf(&parent_id, "%s$%X", "", startID))
+    {
+      DPRINTF(E_DEBUG, L_SCANNER, _("[GetParentID] vfolder=%s, startID=%d, parent_id=%s\n"),
+              media_path->vfolder, startID, parent_id);
+    }
   }
 
   return parent_id;
@@ -1037,7 +1039,11 @@ start_rebuild()
 		{
 			int startID = get_next_available_id("OBJECTS", BROWSEDIR_ID);
 			id = insert_directory(bname, path, BROWSEDIR_ID, "", startID);
-			asprintf(&parent_id, "$%X", startID);
+			if(asprintf(&parent_id, "$%X", startID)<0)
+			{
+				DPRINTF(E_WARN, L_SCANNER, "Parent ID could not be generated\n");
+				parent_id = NULL;
+			}
 		}
 		else
 			id = GetFolderMetadata(bname, media_path->path, NULL, NULL, 0);

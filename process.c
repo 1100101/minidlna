@@ -42,6 +42,7 @@
 #include "process.h"
 #include "config.h"
 #include "log.h"
+#include "utils.h"
 
 struct child *children = NULL;
 int number_of_children = 0;
@@ -157,11 +158,11 @@ process_daemonize(void)
 			for (i=getdtablesize();i>=0;--i) close(i);		
 
 			i = open("/dev/null",O_RDWR); /* open stdin */
-			dup(i); /* stdout */
-			dup(i); /* stderr */
+			IGNORE_RETURN_VALUE(dup(i)); /* stdout */
+			IGNORE_RETURN_VALUE(dup(i)); /* stderr */
 
 			umask(027);
-			chdir("/");
+			IGNORE_RETURN_VALUE(chdir("/"));
 
 			break;
 		/* parent process */
