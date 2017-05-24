@@ -43,11 +43,11 @@
 #include "log.h"
 
 image_size_type_t image_size_types[] = {
-	{ JPEG_TN,  "jpeg_tn",   160,  160 },
-	{ JPEG_SM,  "jpeg_sm",   640,  480 },
-	{ JPEG_MED, "jpeg_med", 1024,  768 },
-	{ JPEG_LRG, "jpeg_lrg", 4096, 4096 },
-	{ JPEG_INV, "",            0,    0 }
+	{ JPEG_TN,  "thumbnail", 160,  160 },
+	{ JPEG_SM,  "small",     640,  480 },
+	{ JPEG_MED, "medium",   1024,  768 },
+	{ JPEG_LRG, "large",    4096, 4096 },
+	{ JPEG_INV, "",            0,    0 },
 };
 
 const image_size_type_t*
@@ -77,7 +77,7 @@ art_cache_path(const image_size_type_t *image_size, const char* postfix, const c
 		#ifdef DEBUG
 		fname,
 		#endif
-		image_size ? "/XXXXxYYYY" : "", // holds the image size, 10 chars max. I.e. '.4096x4096'
+		image_size ? "/thumbnail" : "", // holds the image size, 10 chars max. I.e. '.thumbnail'
 		postfix
 	) < 0 )  return 0;
 
@@ -86,7 +86,7 @@ art_cache_path(const image_size_type_t *image_size, const char* postfix, const c
 		// '/' is not part of a valid filename, but we added it there.
 		// This is how we know what to replace, and why we can safely do so.
 		char* replace = strrchr(*cache_file, '/');
-		sprintf(replace, ".%dx%d%s", image_size->width, image_size->height, postfix);
+		sprintf(replace, ".%s%s", image_size->name, postfix);
 	}
 
 	return 1;
