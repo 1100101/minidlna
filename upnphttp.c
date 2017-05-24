@@ -1719,6 +1719,12 @@ SendResp_albumArt(struct upnphttp * h, char * url)
 
 	long long size_type = strtoll(suffix + 1, NULL, 10);
 	const image_size_type_t *image_size_type = get_image_size_type((image_size_type_enum)size_type);
+	if(image_size_type->type == JPEG_INV)
+	{
+		DPRINTF(E_ERROR, L_HTTP, "Invalid image size '%s' requested, responding ERROR 404\n", url);
+		Send404(h);
+		return;
+	}
 	art_cache_path(image_size_type, ".jpg", path, &albumart_path);
 
 	int fd = _open_file(albumart_path);
