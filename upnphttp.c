@@ -1703,9 +1703,9 @@ SendResp_albumArt(struct upnphttp * h, char * url)
 	}
 
 	long long id = strtoll(url, NULL, 10);
-	const char *suffix = strchr(url, '-');
+	const char *suffix = strrchr(url, '-');
 
-	path = sql_get_text_field(db, "SELECT PATH from ALBUM_ART where ID  = '%lld'", id);
+	path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = %lld", id);
 	if( !path || !suffix)
 	{
 		DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s not found, responding ERROR 404\n", url);
@@ -1737,10 +1737,21 @@ SendResp_albumArt(struct upnphttp * h, char * url)
 			goto albumart_error;
 		}
 #endif
-		int ret = save_resized_album_art_from_file_to_file(path, albumart_path, image_size_type);
-		if (ret != 0)
+		char *fullsize_albumart_path = NULL;
+		if(art_cache_path(NULL, ".jpg", path, &fullsize_albumart_path))
 		{
-			DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s not found, responding ERROR 404\n", url, image_size_type->name);
+			int ret = save_resized_album_art_from_file_to_file(fullsize_albumart_path, albumart_path, image_size_type);
+			free(fullsize_albumart_path);
+			if (ret != 0)
+			{
+				DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s not found, responding ERROR 404\n", url, image_size_type->name);
+				Send404(h);
+				goto albumart_error;
+			}
+		}
+		else
+		{
+			DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s: Could not format path to full-size album art for '%s', responding ERROR 404\n", url, image_size_type->name, path);
 			Send404(h);
 			goto albumart_error;
 		}
