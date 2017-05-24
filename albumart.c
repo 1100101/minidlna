@@ -248,26 +248,6 @@ save_resized_album_art_from_imsrc_to(const image_s *imsrc, const char *src_file,
 	return 0;
 }
 
-static char *
-save_resized_album_art_from_imsrc(const image_s *imsrc, const char *path, const image_size_type_t *image_size_type)
-{
-	char *cache_file;
-	if (!image_size_type)
-		return NULL;
-
-	if(!art_cache_path(image_size_type, ".jpg", path, &cache_file))
-		return NULL;
-
-	int ret = save_resized_album_art_from_imsrc_to(imsrc, path, cache_file, image_size_type);
-	if (ret != 0)
-	{
-		free(cache_file);
-		cache_file = NULL;
-	}
-
-	return cache_file;
-}
-
 int
 save_resized_album_art_from_file_to_file(const char *path, const char *dst_file, const image_size_type_t *image_size_type)
 {
@@ -352,7 +332,7 @@ update_if_album_art(const char *path)
 char *
 check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 {
-	char *art_path = NULL, *thumb_art_path = NULL;
+	char *art_path = NULL;
 	image_s *imsrc;
 	static char last_path[PATH_MAX];
 	static unsigned int last_hash = 0;
@@ -399,6 +379,7 @@ check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 	}
 
 	// New file, save an original copy
+	// The webservice will generate other thumbs from this on the fly
 	if(!art_path) {
 		last_hash = hash;
 		if(!art_cache_path(NULL, ".jpg", path, &art_path))
@@ -409,10 +390,6 @@ check_embedded_art(const char *path, uint8_t *image_data, int image_size)
 		image_save_to_jpeg_file(imsrc, art_path);
 	}
 
-	/* add a thumbnail version anticipiating a bit for the most likely access.
-	 * The webservice will generate other thumbs on the fly if not available */
-	thumb_art_path = save_resized_album_art_from_imsrc(imsrc, path, get_image_size_type(JPEG_TN));
-	free(thumb_art_path);
 	image_free(imsrc);
 
 	if( !art_path )
@@ -483,21 +460,13 @@ check_dir:
 		if (access(file, R_OK) == 0)
 add_cached_image:
 		{
-			char *cache_file, *thumb;
+			char *cache_file;
 
 			DPRINTF(E_DEBUG, L_ARTWORK, "Found album art in %s\n", file);
 			if (art_cache_exists(NULL, ".jpg", file, &cache_file))
 				return cache_file;
 
 			int ret = copy_file(file, cache_file);
-			/* add a thumbnail version anticipiating a bit for the most likely access.
-			* The webservice will generate other thumbs on the fly if not available */
-			image_s *imsrc = image_new_from_jpeg(file, 1, NULL, 0, 1, ROTATE_NONE);
-			if (!imsrc) break;
-
-			thumb = save_resized_album_art_from_imsrc(imsrc, file, get_image_size_type(JPEG_TN));
-			image_free(imsrc);
-			free(thumb);
 			return ret == 0 ? cache_file : NULL;
 		}
 	}
