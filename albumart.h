@@ -25,11 +25,11 @@
 #define __ALBUMART_H__
 
 typedef enum {
-	JPEG_TN,
+	JPEG_TN = 0,
 	JPEG_SM,
 	JPEG_MED,
 	JPEG_LRG,
-	JPEG_INV
+	JPEG_INV,
 } image_size_type_enum;
 
 typedef struct
