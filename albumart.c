@@ -272,6 +272,10 @@ int
 save_resized_album_art_from_file_to_file(const char *path, const char *dst_file, const image_size_type_t *image_size_type)
 {
 	image_s *imsrc = image_new_from_jpeg(path, 1, NULL, 0, 1, ROTATE_NONE);
+	if(!imsrc) {
+		DPRINTF(E_WARN, L_METADATA, "Failed to resize '%s' to '%s'\n", path, dst_file);
+		return -1;
+	}
 	int ret = save_resized_album_art_from_imsrc_to(imsrc, path, dst_file, image_size_type);
 	image_free(imsrc);
 	return ret;
