@@ -53,7 +53,7 @@ image_size_type_t image_size_types[] = {
 const image_size_type_t*
 get_image_size_type(image_size_type_enum size_type)
 {
-	if (size_type < JPEG_TN || size_type > JPEG_MED) size_type = JPEG_INV;
+	if (size_type < JPEG_TN || size_type > JPEG_LRG) size_type = JPEG_INV;
 	return &image_size_types[size_type];
 }
 

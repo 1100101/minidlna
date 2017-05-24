@@ -1157,6 +1157,10 @@ callback(void *args, int argc, char **argv, char **azColName)
 				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 2);
 				append_with_attributes(str, "protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_MED\"", dlna_buf, "res");
 				append_with_attributes(str, "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 3);
+				append_with_attributes(str, "protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_LRG\"", dlna_buf, "res");
+				append_with_attributes(str, "dlna:profileID=\"JPEG_LRG\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
 			} else if( passed_args->filter & FILTER_UPNP_ALBUMARTURI ) {
 				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 0);
 				append_with_attributes(str, "dlna:profileID=\"JPEG_TN\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
@@ -1166,6 +1170,9 @@ callback(void *args, int argc, char **argv, char **azColName)
 
 				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 2);
 				append_with_attributes(str, "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
+
+				snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 3);
+				append_with_attributes(str, "dlna:profileID=\"JPEG_LRG\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"", dlna_buf, "upnp:albumArtURI");
 			}
 		}
 		if( (passed_args->flags & FLAG_MS_PFS) && *mime == 'i' ) {
@@ -1231,6 +1238,10 @@ callback(void *args, int argc, char **argv, char **azColName)
 
 			attribute = (passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID) ? "dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"" : "";
 			snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 2);
+			append_with_attributes(str, attribute, dlna_buf, "upnp:albumArtURI");
+
+			attribute = (passed_args->filter & FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID) ? "dlna:profileID=\"JPEG_LRG\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\"" : "";
+			snprintf(dlna_buf, sizeof(dlna_buf), "%s/AlbumArt/%s-%d.jpg", host, detailID, 3);
 			append_with_attributes(str, attribute, dlna_buf, "upnp:albumArtURI");
 		}
 		if( passed_args->filter & FILTER_AV_MEDIA_CLASS ) {
