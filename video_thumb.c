@@ -159,7 +159,7 @@ video_thumb_generate_tofile(const char *moviefname, const char *thumbfname, int 
 
 	if ((video_thumb_generate_tobuff(moviefname, &img, seek, width, LAV_PIX_FMT_RGB32_1) < 0))
 	{
-		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tofile: unable to generate thumbnail to buffer! \n");
+		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tofile: unable to generate thumbnail to buffer for '%s'!\n", moviefname);
 		return -1;
 	}
 
