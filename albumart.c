@@ -214,15 +214,23 @@ save_resized_album_art_from_imsrc_to(const image_s *imsrc, const char *src_file,
 	if (!imsrc || !image_size_type)
 		return -1;
 
-	if (imsrc->width > imsrc->height)
+	// Scale, ensuring that neither direction exceeds the configured maximum
+	// image dimensions.
+	int src_ar = imsrc->width*image_size_type->height;
+	int tgt_ar = image_size_type->width*imsrc->height;
+	if( src_ar < tgt_ar )
+	{ // imsrc is too tall
+		dsth = image_size_type->height;
+		dstw = (imsrc->width << 8) / ((imsrc->height << 8) / dsth);
+	}
+	else if( src_ar > tgt_ar )
 	{
 		dstw = image_size_type->width;
 		dsth = (imsrc->height << 8) / ((imsrc->width << 8) / dstw);
 	}
-	else
-	{
+	else {
+		dstw = image_size_type->width;
 		dsth = image_size_type->height;
-		dstw = (imsrc->width << 8) / ((imsrc->height << 8) / dsth);
 	}
 
 	if (dstw > imsrc->width && dsth > imsrc->height)
