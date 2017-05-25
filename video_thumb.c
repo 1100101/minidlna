@@ -157,7 +157,7 @@ video_thumb_generate_tofile(const char *moviefname, const char *thumbfname, int 
 	start = clock();
 	memset(&img, 0, sizeof(image_s));
 
-	if ((video_thumb_generate_tobuff(moviefname, &img, seek, width, LAV_PIX_FMT_RGB32_1) < 0))
+	if ((video_thumb_generate_tobuff(moviefname, &img, seek, width) < 0))
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tofile: unable to generate thumbnail to buffer for '%s'!\n", moviefname);
 		return -1;
@@ -239,7 +239,7 @@ video_thumb_swscale_frame(AVFrame *frame, int width, enum AVPixelFormat pixfmt)
 
 
 static int
-video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek, int width, enum AVPixelFormat pixfmt)
+video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek, int width)
 {
 	AVFrame *frame = NULL;
 	AVPacket packet;
@@ -330,7 +330,10 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 	}
 
 	// We always need to scale, even if just to convert the image format from
-	// YUV or other to the target pixfmt.
+	// YUV or other to the target pixfmt (RGBA32). We need to convert to RGBA32,
+	// because that is what this function returns. The data we return is expected
+	// to be in consecutive RGBA32, i.e. no planes or slices, because it is
+	// returned as an struct image_s.
 	if(!width) {
 		width = vcctx->width;
 	}
@@ -338,26 +341,38 @@ video_thumb_generate_ctx_tobuff(AVFormatContext *fctx, void* imgbuffer, int seek
 		width = 64;
 	else if (width > 480)
 		width = 480;
-	AVFrame* scframe = video_thumb_swscale_frame(frame, width, pixfmt);
+
+	AVFrame* scframe = video_thumb_swscale_frame(frame, width, LAV_PIX_FMT_RGB32_1);
 	if(!scframe) goto thumb_generate_error;
 	lav_frame_unref(frame);
 	frame = scframe;
 
 	// Copy to output
 	free(buffer->buf);
-	// x4 for PIXFMT_RGBA
-	buffer->buf = (pix*) malloc(sizeof(uint8_t) * frame->linesize[0] * frame->height * 4);
+	buffer->width = frame->width;
+	buffer->height = frame->height;
+	buffer->buf = (pix*) malloc(sizeof(uint8_t) * 4 * buffer->width * buffer->height);
 	if(!buffer->buf)
 	{
 		DPRINTF(E_WARN, L_METADATA, "video_thumb_generate_tobuff: malloc error!! Unable to alloc memory to buffer the picture \n");
 		goto thumb_generate_error;
 	}
 
-	buffer->width = frame->width;
-	buffer->height = frame->height;
-	memcpy(buffer->buf, frame->data[0], frame->linesize[0] * buffer->height);
-	DPRINTF(E_DEBUG, L_METADATA, "video_thumb_generate_tobuff: buffer->width: %d, buffer->height: %d\n", buffer->width, buffer->height);
-
+	// check if we need to do any work to linearize. Often (because we target
+	// RGBA32) this check will be true.
+	if(frame->width == frame->linesize[0])
+	{
+		memcpy(buffer->buf, frame->data[0], 4 * frame->width * buffer->height);
+	}
+	else
+	{
+		pix *p = buffer->buf;
+		for(int32_t i=0; i < buffer->height; ++i)
+		{
+			memcpy(p, frame->data[0] + i*frame->linesize[0], 4 * buffer->width);
+			p += buffer->width;
+		}
+	}
 	ret = 0;
 
 thumb_generate_error:
@@ -371,7 +386,7 @@ thumb_generate_error:
 #endif
 
 int
-video_thumb_generate_tobuff(const char *moviefname, void* imgbuffer, int seek, int width, enum AVPixelFormat pixfmt)
+video_thumb_generate_tobuff(const char *moviefname, void* imgbuffer, int seek, int width)
 {
 #ifdef ENABLE_VIDEO_THUMB
 	AVFormatContext *fctx = NULL;
@@ -386,7 +401,7 @@ video_thumb_generate_tobuff(const char *moviefname, void* imgbuffer, int seek, i
 		return -1;
 	}
 
-	ret = video_thumb_generate_ctx_tobuff(fctx, imgbuffer, seek, width, pixfmt);
+	ret = video_thumb_generate_ctx_tobuff(fctx, imgbuffer, seek, width);
 
 	lav_close(fctx);
 	return ret;
@@ -505,7 +520,7 @@ video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack
 #ifdef ENABLE_VIDEO_THUMB
 		if ( !allblack && fctx)
 		{
-			res = video_thumb_generate_ctx_tobuff(fctx, &img, per[i], MTA_WIDTH, LAV_PIX_FMT_RGB32_1);
+			res = video_thumb_generate_ctx_tobuff(fctx, &img, per[i], MTA_WIDTH);
 			if (img.buf)
 			{
 				jpeg = image_save_to_jpeg_buf(&img, &jpegsize);
