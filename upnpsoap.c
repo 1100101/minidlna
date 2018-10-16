@@ -77,6 +77,8 @@
 #else
 # define __SORT_LIMIT
 #endif
+#define NON_ZERO(x) (x && atoi(x))
+#define IS_ZERO(x) (!x || !atoi(x))
 
 /* Standard Errors:
  *
@@ -261,6 +263,7 @@ GetSortCapabilities(struct upnphttp * h, const char * action)
 		  "dc:date,"
 		  "upnp:class,"
 		  "upnp:album,"
+		  "upnp:episodeNumber,"
 		  "upnp:originalTrackNumber"
 		"</SortCaps>"
 		"</u:%sResponse>";
@@ -388,36 +391,39 @@ GetCurrentConnectionInfo(struct upnphttp * h, const char * action)
 #define FILTER_UPNP_ALBUMARTURI			0x00010000
 #define FILTER_UPNP_ALBUMARTURI_DLNA_PROFILEID	0x00020000
 #define FILTER_UPNP_ARTIST			0x00040000
-#define FILTER_UPNP_GENRE			0x00080000
-#define FILTER_UPNP_ORIGINALTRACKNUMBER		0x00100000
-#define FILTER_UPNP_SEARCHCLASS			0x00200000
-#define FILTER_UPNP_STORAGEUSED			0x00400000
+#define FILTER_UPNP_EPISODENUMBER		0x00080000
+#define FILTER_UPNP_EPISODESEASON		0x00100000
+#define FILTER_UPNP_GENRE			0x00200000
+#define FILTER_UPNP_ORIGINALTRACKNUMBER		0x00400000
+#define FILTER_UPNP_SEARCHCLASS			0x00800000
+#define FILTER_UPNP_STORAGEUSED			0x01000000
 /* Not normally used, so leave out of the default filter */
-#define FILTER_UPNP_PLAYBACKCOUNT		0x01000000
-#define FILTER_UPNP_LASTPLAYBACKPOSITION	0x02000000
+#define FILTER_UPNP_PLAYBACKCOUNT		0x02000000
+#define FILTER_UPNP_LASTPLAYBACKPOSITION	0x04000000
 /* Vendor-specific filter flags */
-#define FILTER_SEC_CAPTION_INFO_EX		0x04000000
-#define FILTER_SEC_DCM_INFO			0x08000000
-#define FILTER_PV_SUBTITLE_FILE_TYPE		0x10000000
-#define FILTER_PV_SUBTITLE_FILE_URI		0x20000000
-#define FILTER_PV_SUBTITLE			0x30000000
-#define FILTER_AV_MEDIA_CLASS			0x40000000
-#define FILTER_SEC_META_FILE_INFO		0x80000000
+#define FILTER_SEC_CAPTION_INFO_EX		0x08000000
+#define FILTER_SEC_DCM_INFO			0x10000000
+#define FILTER_SEC_META_FILE_INFO		0x20000000
+#define FILTER_SEC				0x38000000
+#define FILTER_PV_SUBTITLE_FILE_TYPE		0x40000000
+#define FILTER_PV_SUBTITLE_FILE_URI		0x80000000
+#define FILTER_PV_SUBTITLE			0xc0000000
+#define FILTER_AV_MEDIA_CLASS			0x100000000
 /* Masks */
-#define STANDARD_FILTER_MASK			0x00FFFFFF
+#define STANDARD_FILTER_MASK			0x01FFFFFF
 #define FILTER_BOOKMARK_MASK			(FILTER_UPNP_PLAYBACKCOUNT | \
 						 FILTER_UPNP_LASTPLAYBACKPOSITION | \
 						 FILTER_SEC_DCM_INFO)
 
-static uint32_t
+static uint64_t
 set_filter_flags(char *filter, struct upnphttp *h)
 {
 	char *item, *saveptr = NULL;
-	uint32_t flags = 0;
+	uint64_t flags = 0;
 	int samsung = h->req_client && (h->req_client->type->flags & FLAG_SAMSUNG);
 
 	if( !filter || (strlen(filter) <= 1) ) {
-		/* Not the full 32 bits.  Skip vendor-specific stuff by default. */
+		/* Not the full 64 bits.  Skip vendor-specific stuff by default. */
 		flags = STANDARD_FILTER_MASK;
 		if (samsung)
 			flags |= FILTER_SEC_CAPTION_INFO_EX | FILTER_SEC_DCM_INFO | FILTER_SEC_META_FILE_INFO;
@@ -579,6 +585,14 @@ set_filter_flags(char *filter, struct upnphttp *h)
 		{
 			flags |= FILTER_AV_MEDIA_CLASS;
 		}
+		else if( strcmp(item, "upnp:episodeNumber") == 0 )
+		{
+			flags |= FILTER_UPNP_EPISODENUMBER;
+		}
+		else if( strcmp(item, "upnp:episodeSeason") == 0 )
+		{
+			flags |= FILTER_UPNP_EPISODESEASON;
+		}
 		item = strtok_r(NULL, ",", &saveptr);
 	}
 
@@ -639,9 +653,10 @@ parse_sort_criteria(char *sortCriteria, int *error)
 		{
 			strcatf(&str, "d.DATE");
 		}
-		else if( strcasecmp(item, "upnp:originalTrackNumber") == 0 )
+		else if( strcasecmp(item, "upnp:originalTrackNumber") == 0 ||
+			 strcasecmp(item, "upnp:episodeNumber") == 0 )
 		{
-			strcatf(&str, "d.DISC, d.TRACK");
+			strcatf(&str, "d.DISC%s, d.TRACK", reverse ? " DESC" : "");
 		}
 		else if( strcasecmp(item, "upnp:album") == 0 )
 		{
@@ -681,6 +696,35 @@ parse_sort_criteria(char *sortCriteria, int *error)
 		free(sortCriteria);
 
 	return order;
+}
+
+static void
+_alphasort_alt_title(char **title, char **alt_title, int requested, int returned, const char *disc, const char *track)
+{
+	char *old_title = *alt_title ?: NULL;
+	char buf[8];
+	int pad;
+	int ret;
+
+	snprintf(buf, sizeof(buf), "%d", requested);
+	pad = strlen(buf);
+
+	if (NON_ZERO(track) && !strstr(*title, track)) {
+		if (NON_ZERO(disc))
+			ret = asprintf(alt_title, "%0*d %s.%s %s",
+					pad, returned, disc, track, *title);
+		else
+			ret = asprintf(alt_title, "%0*d %s %s",
+					pad, returned, track, *title);
+	}
+	else
+		ret = asprintf(alt_title, "%0*d %s", pad, returned, *title);
+
+	if (ret > 0)
+		*title = *alt_title;
+	else
+		*alt_title = NULL;
+	free(old_title);
 }
 
 inline static void
@@ -793,9 +837,6 @@ object_exists(const char *object)
                 " d.THUMBNAIL, d.CREATOR, d.DLNA_PN, d.MIME, d.ALBUM_ART, d.ROTATION, d.MTA, d.DISC "
 #define SELECT_COLUMNS "SELECT o.OBJECT_ID, o.PARENT_ID, o.REF_ID, " COLUMNS
 
-#define NON_ZERO(x) (x && atoi(x))
-#define IS_ZERO(x) (!x || !atoi(x))
-
 static int
 append_with_attributes(struct string_s *str, const char *attribute, const char *value, const char *elementName)
 {
@@ -809,7 +850,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 	char *id = argv[0], *parent = argv[1], *refID = argv[2], *detailID = argv[3], *class = argv[4], *size = argv[5], *title = argv[6],
 	     *duration = argv[7], *bitrate = argv[8], *sampleFrequency = argv[9], *artist = argv[10], *album = argv[11],
 	     *genre = argv[12], *comment = argv[13], *nrAudioChannels = argv[14], *track = argv[15], *date = argv[16], *resolution = argv[17],
-	     *tn = argv[18], *creator = argv[19], *dlna_pn = argv[20], *mime = argv[21], *album_art = argv[22], *rotate = argv[23], *mta = argv[24];
+	     *tn = argv[18], *creator = argv[19], *dlna_pn = argv[20], *mime = argv[21], *album_art = argv[22], *rotate = argv[23], *mta = argv[24], *disc = argv[25];
 	char dlna_buf[128];
 	const char *ext;
 	struct string_s *str = passed_args->str;
@@ -858,6 +899,10 @@ callback(void *args, int argc, char **argv, char **azColName)
 		{
 			passed_args->flags &= ~FLAG_HAS_CAPTIONS; // clear the caption flag for each item
 			dlna_flags |= DLNA_FLAG_TM_S;
+			if (GETFLAG(SUBTITLES_MASK) &&
+			    (passed_args->client >= EStandardDLNA150 || !passed_args->client))
+				passed_args->flags |= FLAG_CAPTION_RES;
+
 			if( passed_args->flags & FLAG_MIME_AVI_DIVX )
 			{
 				if( strcmp(mime, "video/x-msvideo") == 0 )
@@ -950,6 +995,9 @@ callback(void *args, int argc, char **argv, char **azColName)
 		}
 		else
 			dlna_flags |= DLNA_FLAG_TM_I;
+		/* Force an alphabetical sort, for clients that like to do their own sorting */
+		if( GETFLAG(FORCE_ALPHASORT_MASK) )
+			_alphasort_alt_title(&title, &alt_title, passed_args->requested, passed_args->returned, disc, track);
 
 		if( passed_args->flags & FLAG_SKIP_DLNA_PN )
 			dlna_pn = NULL;
@@ -1025,8 +1073,15 @@ callback(void *args, int argc, char **argv, char **azColName)
 		if( strncmp(id, MUSIC_PLIST_ID, strlen(MUSIC_PLIST_ID)) == 0 ) {
 			track = strrchr(id, '$')+1;
 		}
-		if( NON_ZERO(track) && (passed_args->filter & FILTER_UPNP_ORIGINALTRACKNUMBER) ) {
-			ret = strcatf(str, "&lt;upnp:originalTrackNumber&gt;%s&lt;/upnp:originalTrackNumber&gt;", track);
+		if( NON_ZERO(track) ) {
+			if( *mime == 'a' && (passed_args->filter & FILTER_UPNP_ORIGINALTRACKNUMBER) ) {
+				ret = strcatf(str, "&lt;upnp:originalTrackNumber&gt;%s&lt;/upnp:originalTrackNumber&gt;", track);
+			} else if( *mime == 'v' ) {
+				if( NON_ZERO(disc) && (passed_args->filter & FILTER_UPNP_EPISODESEASON) )
+					ret = strcatf(str, "&lt;upnp:episodeSeason&gt;%s&lt;/upnp:episodeSeason&gt;", disc);
+				if( passed_args->filter & FILTER_UPNP_EPISODENUMBER )
+					ret = strcatf(str, "&lt;upnp:episodeNumber&gt;%s&lt;/upnp:episodeNumber&gt;", track);
+			}
 		}
 		if( passed_args->filter & FILTER_RES ) {
 			ext = mime_to_ext(mime);
@@ -1338,6 +1393,8 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 		ret = strcatf(&str, DLNA_NAMESPACE);
 	if( args.filter & FILTER_PV_SUBTITLE )
 		ret = strcatf(&str, PV_NAMESPACE);
+	if( args.filter & FILTER_SEC )
+		ret = strcatf(&str, SEC_NAMESPACE);
 	strcatf(&str, "&gt;\n");
 
 	args.returned = 0;

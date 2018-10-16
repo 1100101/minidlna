@@ -67,6 +67,7 @@ enum upnpconfigoptions {
 	THUMB_WIDTH,			/* thunbnail image with */
 #endif
 	ENABLE_MTA,
+	ENABLE_SUBTITLES,		/* Enable generic subtitle support for all clients by default */
 };
 
 /* readoptionsfile()

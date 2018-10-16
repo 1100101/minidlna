@@ -74,6 +74,7 @@ static const struct {
 	{ THUMB_WIDTH, "thumbnail_width" },
 #endif
 	{ ENABLE_MTA, "enable_mta" },
+	{ ENABLE_SUBTITLES, "enable_subtitles" },
 };
 
 int

@@ -68,6 +68,7 @@
 #include <limits.h>
 #include <libgen.h>
 #include <pwd.h>
+#include <grp.h>
 
 #include "config.h"
 
@@ -602,6 +603,7 @@ init(int argc, char **argv)
 	char *log_level = NULL;
 	int ifaces = 0;
 	uid_t uid = 0;
+	gid_t gid = 0;
 
 	/* first check if "-f" option is used */
 	for (i=2; i<argc; i++)
@@ -804,10 +806,17 @@ init(int argc, char **argv)
 					DPRINTF(E_FATAL, L_GENERAL, "Bad user '%s'.\n",
 						ary_options[i].value);
 				uid = entry->pw_uid;
+				if (!gid)
+					gid = entry->pw_gid;
 			}
 			break;
 		case FORCE_SORT_CRITERIA:
 			force_sort_criteria = ary_options[i].value;
+			if (force_sort_criteria[0] == '!')
+			{
+				SETFLAG(FORCE_ALPHASORT_MASK);
+				force_sort_criteria++;
+			}
 			break;
 		case MAX_CONNECTIONS:
 			runtime_vars.max_connections = atoi(ary_options[i].value);
@@ -835,6 +844,10 @@ init(int argc, char **argv)
 #endif
 		case ENABLE_MTA:
 			runtime_vars.mta = atoi(ary_options[i].value);
+			break;
+		case ENABLE_SUBTITLES:
+			if (!strtobool(ary_options[i].value))
+				CLEARFLAG(SUBTITLES_MASK);
 			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
@@ -948,7 +961,7 @@ init(int argc, char **argv)
 		case 'R':
 			snprintf(buf, sizeof(buf), "rm -rf %s/files.db %s/art_cache", db_path, db_path);
 			if (system(buf) != 0)
-				DPRINTF(E_FATAL, L_GENERAL, "Failed to clean old file cache. EXITING\n");
+				DPRINTF(E_FATAL, L_GENERAL, "Failed to clean old file cache %s. EXITING\n", db_path);
 			break;
 		case 'u':
 			if (i+1 != argc)
@@ -962,11 +975,29 @@ init(int argc, char **argv)
 					if (!entry)
 						DPRINTF(E_FATAL, L_GENERAL, "Bad user '%s'.\n", argv[i]);
 					uid = entry->pw_uid;
+					if (!gid)
+						gid = entry->pw_gid;
 				}
 			}
 			else
 				DPRINTF(E_FATAL, L_GENERAL, "Option -%c takes one argument.\n", argv[i][1]);
 			break;
+		case 'g':
+			if (i+1 != argc)
+			{
+				i++;
+				gid = strtoul(argv[i], &string, 0);
+				if (*string)
+				{
+					/* Symbolic group given, not GID. */
+					struct group *grp = getgrnam(argv[i]);
+					if (!grp)
+						DPRINTF(E_FATAL, L_GENERAL, "Bad group '%s'.\n", argv[i]);
+					gid = grp->gr_gid;
+				}
+			}
+			else
+				DPRINTF(E_FATAL, L_GENERAL, "Option -%c takes one argument.\n", argv[i][1]);
 			break;
 #ifdef __linux__
 		case 'S':
@@ -987,7 +1018,7 @@ init(int argc, char **argv)
 	{
 		printf("Usage:\n\t"
 			"%s [-d] [-v] [-f config_file] [-p port]\n"
-			"\t\t[-i network_interface] [-u uid_to_run_as]\n"
+			"\t\t[-i network_interface] [-u uid_to_run_as] [-g group_to_run_as]\n"
 			"\t\t[-t notify_interval] [-P pid_filename]\n"
 			"\t\t[-s serial] [-m model_number]\n"
 #ifdef __linux__
@@ -1095,6 +1126,10 @@ init(int argc, char **argv)
 			DPRINTF(E_ERROR, L_GENERAL, "Unable to set db_path [%s] ownership to %d: %s\n",
 				db_path, uid, strerror(errno));
 	}
+
+	if (gid > 0 && setgid(gid) == -1)
+		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to gid '%d'. [%s] EXITING.\n",
+			gid, strerror(errno));
 
 	if (uid > 0 && setuid(uid) == -1)
 		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
