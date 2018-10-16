@@ -1032,12 +1032,6 @@ start_rebuild()
 	char path[MAXPATHLEN];
 	char *parent_id = NULL;
 
-	av_register_all();
-#ifdef ENABLE_VIDEO_THUMB
-	avcodec_register_all();
-#endif
-	av_log_set_level(AV_LOG_PANIC);
-
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{
 		int64_t id;
@@ -1088,6 +1082,7 @@ start_scanner()
 {
 	DPRINTF(E_DEBUG, L_SCANNER,  "Starting Media Scan\n");
 #if USE_FORK
+	SETFLAG(SCANNING_MASK);
 	sqlite3_close(db);
 	scanner_pid = fork();
 	open_db(&db);
@@ -1098,15 +1093,12 @@ start_scanner()
 	// At the end of the function the child will also close the database again.
 #endif
 
-	SETFLAG(SCANNING_MASK);
 
 	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
 
 	setlocale(LC_COLLATE, "");
 
-	av_register_all();
-	av_log_set_level(AV_LOG_PANIC);
 	if( GETFLAG(RESCAN_MASK) )
 	{
 		start_rescan();

@@ -1226,6 +1226,12 @@ main(int argc, char **argv)
 		return 1;
 	init_nls();
 
+	// We always need to register with LibAV; we may end up as the one running
+	// the scanner, generating thumbnails, etc. if the scanner's fork() fails,
+	// USE_FORK is not set, or inotify/kqueue detect a change, etc.
+	av_register_all();
+	av_log_set_level(AV_LOG_PANIC);
+
 	DPRINTF(E_WARN, L_GENERAL, "Starting " SERVER_NAME " version " MINIDLNA_VERSION ".\n");
 	if (sqlite3_libversion_number() < 3005001)
 	{
@@ -1255,10 +1261,7 @@ main(int argc, char **argv)
 #endif /* HAVE_INOTIFY */
 
 #ifdef HAVE_KQUEUE
-	if (!GETFLAG(SCANNING_MASK)) {
-		av_register_all();
-		kqueue_monitor_start();
-	}
+	kqueue_monitor_start();
 #endif /* HAVE_KQUEUE */
 
 	smonitor = OpenAndConfMonitorSocket();
@@ -1378,24 +1381,25 @@ main(int argc, char **argv)
 		}
 #endif
 
-		if (GETFLAG(SCANNING_MASK) && kill(scanner_pid, 0) != 0) {
-			// While scanning, the content database is in flux, and queries may
-			// fail (apparently). However, even the first query _after_ scanning
-			// has completed sometimes failed (first error 1, "SQL logic error or
-			// missing database", then if the same statement is re-stepped error 1,
-			// "database schema has changed"). By re-opening the database here,
-			// before marking scanning as completed, we force SQLite to refresh,
-			// preventing these errors.
-			sqlite3_close(db);
-			open_db(&db);
+		if (GETFLAG(SCANNING_MASK)) {
+			// If we fork()ed a scanner process, wait for it to finish. If we didn't
+			// fork(), we have already completed the scan (inline) at this point.
+			if(!scanner_pid || kill(scanner_pid, 0) != 0) {
+				// While scanning, the content database is in flux, and queries may
+				// fail (apparently). However, even the first query _after_ scanning
+				// has completed sometimes failed (first error 1, "SQL logic error or
+				// missing database", then if the same statement is re-stepped error 1,
+				// "database schema has changed"). By re-opening the database here,
+				// before marking scanning as completed, we force SQLite to refresh,
+				// preventing these errors.
+				sqlite3_close(db);
+				open_db(&db);
 
-			CLEARFLAG(SCANNING_MASK);
-			if (_get_dbtime() != lastdbtime)
-				updateID++;
-#ifdef HAVE_KQUEUE
-			av_register_all();
-			kqueue_monitor_start();
-#endif /* HAVE_KQUEUE */
+				// Mark scan complete
+				CLEARFLAG(SCANNING_MASK);
+				if (_get_dbtime() != lastdbtime)
+					updateID++;
+			}
 		}
 
 		event_module.process(timeout);
