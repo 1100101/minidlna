@@ -42,6 +42,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
+#include "event.h"
 #include "minidlnapath.h"
 #include "upnphttp.h"
 #include "upnpglobalvars.h"
@@ -480,8 +481,9 @@ close:
 /* ProcessSSDPRequest()
  * process SSDP M-SEARCH requests and responds to them */
 void
-ProcessSSDPRequest(int s, unsigned short port)
+ProcessSSDPRequest(struct event *ev)
 {
+	int s = ev->fd;
 	int n;
 	char bufr[1500];
 	struct sockaddr_in sendername;

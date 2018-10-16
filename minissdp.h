@@ -35,7 +35,7 @@ int OpenAndConfSSDPNotifySocket(struct lan_addr_s *iface);
 
 void SendSSDPNotifies(int s, unsigned int lifetime, const char *host);
 
-void ProcessSSDPRequest(int s, unsigned short port);
+void ProcessSSDPRequest(struct event *ev);
 
 int SendSSDPGoodbyes(int s);
 

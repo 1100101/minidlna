@@ -1088,7 +1088,6 @@ start_scanner()
 {
 	DPRINTF(E_DEBUG, L_SCANNER,  "Starting Media Scan\n");
 #if USE_FORK
-	SETFLAG(SCANNING_MASK);
 	sqlite3_close(db);
 	scanner_pid = fork();
 	open_db(&db);
@@ -1098,6 +1097,8 @@ start_scanner()
 	// The child process (or us, in case of an error) will continue below
 	// At the end of the function the child will also close the database again.
 #endif
+
+	SETFLAG(SCANNING_MASK);
 
 	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");

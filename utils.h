@@ -108,4 +108,12 @@ int copy_file(const char *src_file, const char *dst_file);
 int link_file(const char *src_file, const char *dst_file);
 #define IGNORE_RETURN_VALUE(...) if(__VA_ARGS__);
 
+/* Timeval manipulations */
+void	timevaladd(struct timeval *t1, const struct timeval *t2);
+void	timevalsub(struct timeval *t1, const struct timeval *t2);
+#define	timevalcmp(tvp, uvp, cmp)					\
+	(((tvp)->tv_sec == (uvp)->tv_sec) ?				\
+	    ((tvp)->tv_usec cmp (uvp)->tv_usec) :			\
+	    ((tvp)->tv_sec cmp (uvp)->tv_sec))
+
 #endif

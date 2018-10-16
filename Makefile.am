@@ -30,6 +30,12 @@ minidlnad_SOURCES = minidlna.c upnphttp.c upnpdescgen.c upnpsoap.c \
 			playlist.c image_utils.c albumart.c log.c video_thumb.c \
 			containers.c avahi.c tagutils/tagutils.c
 
+if HAVE_KQUEUE
+minidlnad_SOURCES += kqueue.c monitor_kqueue.c
+else
+minidlnad_SOURCES += select.c
+endif
+
 if HAVE_VORBISFILE
 vorbislibs = -lvorbis -logg
 else
