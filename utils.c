@@ -262,6 +262,8 @@ strip_ext(char *name)
 {
 	char *period;
 
+	if (!name)
+		return NULL;
 	period = strrchr(name, '.');
 	if (period)
 		*period = '\0';
@@ -522,6 +524,27 @@ is_caption(const char * file)
 	return 0;
 }
 
+media_types
+get_media_type(const char *file)
+{
+	const char *ext = strrchr(file, '.');
+	if (!ext)
+		return NO_MEDIA;
+	if (is_image(ext))
+		return TYPE_IMAGE;
+	if (is_video(ext))
+		return TYPE_VIDEO;
+	if (is_audio(ext))
+		return TYPE_AUDIO;
+	if (is_playlist(ext))
+		return TYPE_PLAYLIST;
+	if (is_caption(ext))
+		return TYPE_CAPTION;
+	if (is_nfo(ext))
+		return TYPE_NFO;
+	return NO_MEDIA;
+}
+
 int
 is_album_art(const char * name)
 {
@@ -572,7 +595,7 @@ int
 resolve_unknown_type(const char * path, media_types dir_type)
 {
 	struct stat entry;
-	unsigned char type = TYPE_UNKNOWN;
+	enum file_types type = TYPE_UNKNOWN;
 	char str_buf[PATH_MAX];
 	ssize_t len;
 
@@ -599,31 +622,9 @@ resolve_unknown_type(const char * path, media_types dir_type)
 		}
 		else if( S_ISREG(entry.st_mode) )
 		{
-			switch( dir_type )
-			{
-				case ALL_MEDIA:
-					if( is_image(path) ||
-					    is_audio(path) ||
-					    is_video(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_AUDIO:
-					if( is_audio(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_VIDEO:
-					if( is_video(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_IMAGES:
-					if( is_image(path) )
-						type = TYPE_FILE;
-					break;
-				default:
-					break;
-			}
+			media_types mtype = get_media_type(path);
+			if (dir_type & mtype)
+				type = TYPE_FILE;
 		}
 	}
 	return type;
@@ -686,4 +687,18 @@ base64_encode(const unsigned char *data, size_t ilen, size_t *olen)
 	*olen = osize;
 
 	return obuff;
+}
+
+media_types
+valid_media_types(const char *path)
+{
+	struct media_dir_s *media_dir;
+
+	for (media_dir = media_dirs; media_dir; media_dir = media_dir->next)
+	{
+		if (strncmp(path, media_dir->path, strlen(media_dir->path)) == 0)
+			return media_dir->types;
+	}
+
+	return ALL_MEDIA;
 }

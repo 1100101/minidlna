@@ -667,7 +667,7 @@ SendResp_presentation(struct upnphttp * h)
 		"<HTML>"
 			"<HEAD>"
 	);
-	if(scanning) { // during the scan, refresh the page every 5sec
+	if(GETFLAG(SCANNING_MASK)) { // during the scan, refresh the page every 5sec
 		strcatf(&str,
 				"<meta http-equiv=\"refresh\" content=\"5\"/>"
 		);
@@ -770,7 +770,7 @@ SendResp_presentation(struct upnphttp * h)
 	strcatf(&str, "<br>"
 	              "<form method=\"post\" action=\"?action=DoFullMediaScan\">"
 	              "<button type=\"submit\"");
-	if(scanning) {
+	if (GETFLAG(SCANNING_MASK)) {
 		strcatf(&str, " disabled><i>Media scan in progress...</i>");
 	}
 	else {
@@ -781,7 +781,7 @@ SendResp_presentation(struct upnphttp * h)
 	// Fast rescan button
 	strcatf(&str, "<form method=\"post\" action=\"?action=DoIncrementalMediaScan\">"
 	              "<button type=\"submit\" autofocus");
-	if(scanning) {
+	if (GETFLAG(SCANNING_MASK)) {
 		strcatf(&str, " disabled><i>Media scan in progress...</i>");
 	}
 	else {
@@ -815,7 +815,7 @@ SendResp_presentation(struct upnphttp * h)
 static void
 DoMediaScan(struct upnphttp * h, int rebuild_db)
 {
-	if(!scanning) {
+	if(!GETFLAG(SCANNING_MASK)) {
 		if(rebuild_db) {
 			db_clear(db);
 			char cmd[PATH_MAX*2];
@@ -826,7 +826,9 @@ DoMediaScan(struct upnphttp * h, int rebuild_db)
 				DPRINTF(E_FATAL, L_HTTP, "ERROR: Failed to create sqlite database!\n");
 			}
 		}
-		rescan_db = !rebuild_db;
+		CLEARFLAG(RESCAN_MASK);
+		if(!rebuild_db)
+			SETFLAG(RESCAN_MASK);
 		start_scanner();
 	}
 	// Here we're redirecting the user back to the 'presentation' page through a
