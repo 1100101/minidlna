@@ -42,7 +42,7 @@
 #include "video_thumb.h"
 #include "log.h"
 
-image_size_type_t image_size_types[] = {
+const image_size_type_t image_size_types[] = {
 	{ JPEG_TN,  "thumbnail", 160,  160 },
 	{ JPEG_SM,  "small",     640,  480 },
 	{ JPEG_MED, "medium",   1024,  768 },
@@ -105,7 +105,7 @@ art_cache_cleanup(const char* path)
 {
 	char* cache_file = NULL;
 
-	image_size_type_t* image_size = image_size_types;
+	const image_size_type_t* image_size = image_size_types;
 	do {
 
 	#ifdef ENABLE_VIDEO_THUMB
@@ -126,7 +126,7 @@ art_cache_cleanup(const char* path)
 			free(cache_file);
 		}
 
-	} while(image_size++); // one call to art_cache_exists() with NULL
+	} while((++image_size)->type != JPEG_INV);
 }
 
 const char* art_cache_rename_nftw_renamer_old_path;
