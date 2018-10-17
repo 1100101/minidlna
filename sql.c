@@ -19,6 +19,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <sys/stat.h>
 
 #include "sql.h"
 #include "upnpglobalvars.h"

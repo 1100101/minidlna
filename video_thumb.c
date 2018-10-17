@@ -55,6 +55,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #ifdef ENABLE_VIDEO_THUMB
 #if HAVE_FFMPEG_LIBSWSCALE_SWSCALE_H
