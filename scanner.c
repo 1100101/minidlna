@@ -933,26 +933,6 @@ mta_error:
 	sqlite3_free(sql);
 }
 
-static void
-_notify_start(void)
-{
-#ifdef READYNAS
-	FILE *flag = fopen("/ramfs/.upnp-av_scan", "w");
-	if( flag )
-		fclose(flag);
-#endif
-}
-
-static void
-_notify_stop(void)
-{
-#ifdef READYNAS
-	if( access("/ramfs/.rescan_done", F_OK) == 0 )
-		system("/bin/sh /ramfs/.rescan_done");
-	unlink("/ramfs/.upnp-av_scan");
-#endif
-}
-
 /* rescan functions added by shrimpkin@sourceforge.net */
 static int
 cb_orphans(void *args, int argc, char **argv, char **azColName)
@@ -1026,8 +1006,6 @@ start_rescan(void)
 void
 start_rebuild()
 {
-	_notify_start();
-
 	struct media_dir_s *media_path;
 	char path[MAXPATHLEN];
 	char *parent_id = NULL;
