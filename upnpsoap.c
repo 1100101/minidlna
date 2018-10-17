@@ -99,8 +99,9 @@
  * 800-899 	TBD 			Action-specific errors for non-standard actions.
  * 							Defined by UPnP vendor.
 */
+#define SoapError(x,y,z) _SoapError(x,y,z,__func__)
 static void
-SoapError(struct upnphttp * h, int errCode, const char * errDesc)
+_SoapError(struct upnphttp * h, int errCode, const char * errDesc, const char *func)
 {
 	static const char resp[] =
 		"<s:Envelope "
@@ -123,7 +124,7 @@ SoapError(struct upnphttp * h, int errCode, const char * errDesc)
 	char body[2048];
 	int bodylen;
 
-	DPRINTF(E_WARN, L_HTTP, "Returning UPnPError %d: %s\n", errCode, errDesc);
+	DPRINTF(E_WARN, L_HTTP, "%s Returning UPnPError %d: %s\n", func, errCode, errDesc);
 	bodylen = snprintf(body, sizeof(body), resp, errCode, errDesc);
 	BuildResp2_upnphttp(h, 500, "Internal Server Error", body, bodylen);
 	SendResp_upnphttp(h);
@@ -1037,22 +1038,24 @@ callback(void *args, int argc, char **argv, char **azColName)
 		if( (passed_args->filter & FILTER_BOOKMARK_MASK) ) {
 			/* Get bookmark */
 			int sec = sql_get_int_field(db, "SELECT SEC from BOOKMARKS where ID = '%s'", detailID);
-			if( sec > 0 && (passed_args->filter & FILTER_UPNP_LASTPLAYBACKPOSITION) ) {
+			if( sec > 0 ) {
 				/* This format is wrong according to the UPnP/AV spec.  It should be in duration format,
 				** so HH:MM:SS. But Kodi seems to be the only user of this tag, and it only works with a
 				** raw seconds value.
 				** If Kodi gets fixed, we can use duration_str(sec * 1000) here */
-				ret = strcatf(str, "&lt;upnp:lastPlaybackPosition&gt;%d&lt;/upnp:lastPlaybackPosition&gt;",
-				              sec);
+				if( passed_args->filter & FILTER_UPNP_LASTPLAYBACKPOSITION )
+					ret = strcatf(str, "&lt;upnp:lastPlaybackPosition&gt;%d&lt;/upnp:lastPlaybackPosition&gt;",
+					              sec);
+				if( passed_args->filter & FILTER_SEC_DCM_INFO )
+					ret = strcatf(str, "&lt;sec:dcmInfo&gt;CREATIONDATE=0,FOLDER=%s,BM=%d&lt;/sec:dcmInfo&gt;",
+					              title, sec);
 			}
-			if( passed_args->filter & FILTER_SEC_DCM_INFO )
-				ret = strcatf(str, "&lt;sec:dcmInfo&gt;CREATIONDATE=0,FOLDER=%s,BM=%d&lt;/sec:dcmInfo&gt;",
-				              title, sec);
 			if( passed_args->filter & FILTER_UPNP_PLAYBACKCOUNT ) {
 				ret = strcatf(str, "&lt;upnp:playbackCount&gt;%d&lt;/upnp:playbackCount&gt;",
 				              sql_get_int_field(db, "SELECT WATCH_COUNT from BOOKMARKS where ID = '%s'", detailID));
 			}
 		}
+		free(alt_title);
 		if( (passed_args->filter & FILTER_SEC_META_FILE_INFO) && runtime_vars.mta > 0 && mta && *mta != '0' ) {
 			ret = strcatf(str, "&lt;sec:MetaFileInfo sec:type=&quot;mta&quot;&gt;http://%s:%d/MTA/%s.mta&lt;/sec:MetaFileInfo&gt;",
 				lan_addr[passed_args->iface].str, runtime_vars.port, mta);
@@ -1193,7 +1196,6 @@ callback(void *args, int argc, char **argv, char **azColName)
 							                   "&lt;/sec:CaptionInfoEx&gt;",
 							                   host, detailID);
 					}
-					free(alt_title);
 					break;
 				}
 			}
@@ -1559,7 +1561,7 @@ parse_search_criteria(const char *str, char *sep)
 {
 	struct string_s criteria;
 	int len;
-	int literal = 0, like = 0;
+	int literal = 0, like = 0, class = 0;
 	const char *s;
 
 	if (!str)
@@ -1609,13 +1611,17 @@ parse_search_criteria(const char *str, char *sep)
 				}
 				break;
 			case 'o':
-				if (strncmp(s, "object.", 7) == 0)
-					s += 7;
-				else if (strncmp(s, "object\"", 7) == 0 ||
-				         strncmp(s, "object&quot;", 12) == 0)
+				if (class)
 				{
-					s += 6;
-					continue;
+					class = 0;
+					if (strncmp(s, "object.", 7) == 0)
+						s += 7;
+					else if (strncmp(s, "object\"", 7) == 0 ||
+					         strncmp(s, "object&quot;", 12) == 0)
+					{
+						s += 6;
+						continue;
+					}
 				}
 			default:
 				charcat(&criteria, *s);
@@ -1757,11 +1763,29 @@ parse_search_criteria(const char *str, char *sep)
 				else
 					charcat(&criteria, *s);
 				break;
+			case 'o':
+				if (class)
+				{
+					if (strncmp(s, "object.", 7) == 0)
+					{
+						s += 7;
+						charcat(&criteria, '"');
+						while (*s && !isspace(*s))
+						{
+							charcat(&criteria, *s);
+							s++;
+						}
+						charcat(&criteria, '"');
+					}
+					class = 0;
+					continue;
+				}
 			case 'u':
 				if (strncmp(s, "upnp:class", 10) == 0)
 				{
 					strcatf(&criteria, "o.CLASS");
 					s += 10;
+					class = 1;
 					continue;
 				}
 				else if (strncmp(s, "upnp:actor", 10) == 0)
@@ -2017,6 +2041,31 @@ QueryStateVariable(struct upnphttp * h, const char * action)
 	ClearNameValueList(&data);
 }
 
+static int _set_watch_count(long long id, const char *old, const char *new)
+{
+	int64_t rowid = sqlite3_last_insert_rowid(db);
+	int ret;
+
+	ret = sql_exec(db, "INSERT or IGNORE into BOOKMARKS (ID, WATCH_COUNT)"
+			   " VALUES (%lld, %Q)", id, new ?: "1");
+	if (sqlite3_last_insert_rowid(db) != rowid)
+		return 0;
+
+	if (!new) /* Increment */
+		ret = sql_exec(db, "UPDATE BOOKMARKS set WATCH_COUNT ="
+				   " ifnull(WATCH_COUNT,'0') + 1"
+				   " where ID = %lld", id);
+	else if (old && old[0])
+		ret = sql_exec(db, "UPDATE BOOKMARKS set WATCH_COUNT = %Q"
+				   " where WATCH_COUNT = %Q and ID = %lld",
+				   new, old, id);
+	else
+		ret = sql_exec(db, "UPDATE BOOKMARKS set WATCH_COUNT = %Q"
+				   " where ID = %lld",
+				   new, id);
+	return ret;
+}
+
 /* For some reason, Kodi does URI encoding and appends a trailing slash */
 static void _kodi_decode(char *str)
 {
@@ -2105,16 +2154,7 @@ static void UpdateObject(struct upnphttp * h, const char * action)
 		/* Kodi uses incorrect tag "upnp:playCount" instead of "upnp:playbackCount" */
 		if (strcmp(tag, "upnp:playbackCount") == 0 || strcmp(tag, "upnp:playCount") == 0)
 		{
-			//ret = sql_exec(db, "INSERT OR IGNORE into BOOKMARKS (ID, WATCH_COUNT)"
-			ret = sql_exec(db, "INSERT into BOOKMARKS (ID, WATCH_COUNT)"
-					   " VALUES (%lld, %Q)", (long long)detailID, new);
-			if (atoi(new))
-				ret = sql_exec(db, "UPDATE BOOKMARKS set WATCH_COUNT = %Q"
-						   " where WATCH_COUNT = %Q and ID = %lld",
-						   new, current, (long long)detailID);
-			else
-				ret = sql_exec(db, "UPDATE BOOKMARKS set WATCH_COUNT = 0"
-						   " where ID = %lld", (long long)detailID);
+			ret = _set_watch_count(detailID, current, new);
 		}
 		else if (strcmp(tag, "upnp:lastPlaybackPosition") == 0)
 		{

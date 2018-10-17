@@ -51,7 +51,6 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/param.h>
-#include <limits.h>
 
 #include "config.h"
 #include "upnpglobalvars.h"
@@ -98,7 +97,7 @@ const char *force_sort_criteria = NULL;
  * (i.e. in the response to M-SEARCH, as well as when generating media links) */
 char location_url_override[MAX_LAN_ADDR][LOCATION_URL_MAX_LEN] = {};
 const char* get_location_url_by_lan_addr(char* buf, size_t addr) {
-	if(location_url_override[addr][0]) {
+	if(addr < n_lan_addr && location_url_override[addr][0]) {
 		return location_url_override[addr];
 	}
 	else {
@@ -113,9 +112,7 @@ const char* get_location_url_by_ifindex(char* buf, size_t ifindex) {
 			return get_location_url_by_lan_addr(buf, i);
 		}
 	}
-	// should never happen, but better be safe. Could also return NULL and
-	// let the caller deal with it.
-	return get_location_url_by_lan_addr(buf, 0);
+	return NULL;
 }
 
 void set_location_url_by_lan_addr(size_t addr, char* url) {

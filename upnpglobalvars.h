@@ -49,6 +49,7 @@
 #ifndef __UPNPGLOBALVARS_H__
 #define __UPNPGLOBALVARS_H__
 
+#include <limits.h>
 #include <time.h>
 
 #include "minidlnatypes.h"
@@ -67,6 +68,12 @@
 
 #define USE_FORK 1
 #define DB_VERSION 11
+
+#ifdef READYNAS
+# define LOGFILE_NAME "upnp-av.log"
+#else
+# define LOGFILE_NAME "minidlna.log"
+#endif
 
 #ifdef ENABLE_NLS
 #define _(string) gettext(string)
@@ -165,6 +172,7 @@
 	"http-get:*:audio/mp4:*," \
 	"http-get:*:audio/x-wav:*," \
 	"http-get:*:audio/x-flac:*," \
+	"http-get:*:audio/x-dsd:*," \
 	"http-get:*:application/ogg:*"
 
 #define DLNA_FLAG_DLNA_V1_5      0x00100000
@@ -237,9 +245,9 @@ extern const char *minissdpdsocketpath;
 extern sqlite3 *db;
 #define FRIENDLYNAME_MAX_LEN 64
 extern char friendly_name[];
-extern char icon_path[];
-extern char db_path[];
-extern char log_path[];
+extern char db_path[PATH_MAX];
+extern char log_path[PATH_MAX];
+extern char icon_path[PATH_MAX];
 extern struct media_dir_s *media_dirs;
 extern struct album_art_name_s *album_art_names;
 extern pid_t scanner_pid;
