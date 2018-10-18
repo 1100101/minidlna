@@ -5,7 +5,7 @@
  * Author  : Justin Maggard
  *
  * MiniDLNA media server
- * Copyright (C) 2008-2009  Justin Maggard
+ * Copyright (C) 2008-2017  Justin Maggard
  *
  * This file is part of MiniDLNA.
  *
@@ -73,6 +73,7 @@ static inline int is_dir(const struct dirent *d)
 #endif
 }
 int xasprintf(char **strp, char *fmt, ...) __attribute__((__format__ (__printf__, 2, 3)));
+int begins_with(const char * haystack, const char * needle);
 int ends_with(const char * haystack, const char * needle);
 char *trim(char *str);
 char *strstrc(const char *s, const char *p, const char t);
@@ -80,6 +81,7 @@ char *strcasestrc(const char *s, const char *p, const char t);
 char *modifyString(char *string, const char *before, const char *after, int noalloc);
 char *escape_tag(const char *tag, int force_alloc);
 char *unescape_tag(const char *tag, int force_alloc);
+char *duration_str(int msec);
 char *strip_ext(char *name);
 
 /* Metadata functions */
@@ -88,12 +90,30 @@ int is_audio(const char * file);
 int is_image(const char * file);
 int is_playlist(const char * file);
 int is_caption(const char * file);
+#define is_nfo(file) ends_with(file, ".nfo")
+media_types get_media_type(const char *file);
+media_types valid_media_types(const char *path);
+
 int is_album_art(const char * name);
+int has_ignore(const char * dir, int checkboth);
 int resolve_unknown_type(const char * path, media_types dir_type);
 const char *mime_to_ext(const char * mime);
 
 /* Others */
 int make_dir(char * path, mode_t mode);
-unsigned int DJBHash(uint8_t *data, int len);
+char *base64_encode(const unsigned char *data, size_t ilen, size_t *olen);
+unsigned int DJBHash(const uint8_t *data, int len);
+extern const char* subtitle_formats[];
+int copy_file(const char *src_file, const char *dst_file);
+int link_file(const char *src_file, const char *dst_file);
+#define IGNORE_RETURN_VALUE(...) if(__VA_ARGS__);
+
+/* Timeval manipulations */
+void	timevaladd(struct timeval *t1, const struct timeval *t2);
+void	timevalsub(struct timeval *t1, const struct timeval *t2);
+#define	timevalcmp(tvp, uvp, cmp)					\
+	(((tvp)->tv_sec == (uvp)->tv_sec) ?				\
+	    ((tvp)->tv_usec cmp (uvp)->tv_usec) :			\
+	    ((tvp)->tv_sec cmp (uvp)->tv_sec))
 
 #endif

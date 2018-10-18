@@ -1,8 +1,7 @@
-/* TiVo discovery
+/* Video thumbnail functions
  *
  * Project : minidlna
  * Website : http://sourceforge.net/projects/minidlna/
- * Author  : Justin Maggard
  *
  * MiniDLNA media server
  * Copyright (C) 2009  Justin Maggard
@@ -21,30 +20,17 @@
  * You should have received a copy of the GNU General Public License
  * along with MiniDLNA. If not, see <http://www.gnu.org/licenses/>.
  */
-#include "config.h"
-#ifdef TIVO_SUPPORT
-/*
- *  * A saved copy of a beacon from another tivo or another server
- *   */
-struct aBeacon
-{
-#ifdef DEBUG
-   time_t lastSeen;
-#endif
-   char * machine;
-   char * identity;
-   struct aBeacon *next;
-};
 
-uint32_t
-getBcastAddress();
+#ifndef __VIDEOTHUMB_H__
+#define __VIDEOTHUMB_H__
 
 int
-OpenAndConfTivoBeaconSocket();
+video_thumb_generate_tofile(const char *moviefname, const char* thumbfname, int seek, int width);
 
-void
-sendBeaconMessage(int fd, struct sockaddr_in * client, int len, int broadcast);
+int
+video_thumb_generate_tobuff(const char *moviefname, void* imgbuffer, int seek, int width);
 
-void
-ProcessTiVoBeacon(struct event *);
+char*
+video_thumb_generate_mta_file(const char *moviefname, int duration, int allblack);
+
 #endif

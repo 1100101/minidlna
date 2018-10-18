@@ -34,7 +34,7 @@
 #include <time.h>
 #include <fcntl.h>
 
-#define MAX_LAN_ADDR 4
+#define MAX_LAN_ADDR 8
 /* structure for storing lan addresses
  * with ascii representation and mask */
 struct lan_addr_s {
@@ -51,6 +51,10 @@ struct runtime_vars_s {
 	int max_connections;	/* max number of simultaneous conenctions */
 	const char *root_container;	/* root ObjectID (instead of "0") */
 	const char *ifaces[MAX_LAN_ADDR];	/* list of configured network interfaces */
+#ifdef ENABLE_VIDEO_THUMB
+	int thumb_width;	/* Video thumbnail width */
+#endif
+	int mta;
 };
 
 struct string_s {
@@ -60,11 +64,14 @@ struct string_s {
 };
 
 typedef uint8_t media_types;
-#define NO_MEDIA     0x00
-#define TYPE_AUDIO   0x01
-#define TYPE_VIDEO   0x02
-#define TYPE_IMAGES  0x04
-#define ALL_MEDIA    TYPE_AUDIO|TYPE_VIDEO|TYPE_IMAGES
+#define NO_MEDIA	0x00
+#define TYPE_AUDIO	0x01
+#define TYPE_VIDEO	0x02
+#define TYPE_IMAGE	0x04
+#define TYPE_PLAYLIST	0x09
+#define TYPE_CAPTION	0x10
+#define TYPE_NFO	0x20
+#define ALL_MEDIA	TYPE_AUDIO|TYPE_VIDEO|TYPE_IMAGE
 
 enum file_types {
 	TYPE_UNKNOWN,

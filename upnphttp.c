@@ -64,12 +64,14 @@
 #include <limits.h>
 
 #include "config.h"
+#include "event.h"
 #include "upnpglobalvars.h"
 #include "upnphttp.h"
 #include "upnpdescgen.h"
 #include "minidlnapath.h"
 #include "upnpsoap.h"
 #include "upnpevents.h"
+#include "albumart.h"
 #include "utils.h"
 #include "getifaddr.h"
 #include "image_utils.h"
@@ -81,6 +83,7 @@
 #include "clients.h"
 #include "process.h"
 #include "sendfile.h"
+#include "scanner.h"
 
 #define MAX_BUFFER_SIZE 2147483647
 #define MIN_BUFFER_SIZE 65536
@@ -97,10 +100,12 @@ enum event_type {
 
 static void SendResp_icon(struct upnphttp *, char * url);
 static void SendResp_albumArt(struct upnphttp *, char * url);
+static void SendResp_mta(struct upnphttp *, char * url);
 static void SendResp_caption(struct upnphttp *, char * url);
 static void SendResp_resizedimg(struct upnphttp *, char * url);
 static void SendResp_thumbnail(struct upnphttp *, char * url);
 static void SendResp_dlnafile(struct upnphttp *, char * url);
+static void Process_upnphttp(struct event *ev);
 
 struct upnphttp * 
 New_upnphttp(int s)
@@ -112,18 +117,21 @@ New_upnphttp(int s)
 	if(ret == NULL)
 		return NULL;
 	memset(ret, 0, sizeof(struct upnphttp));
-	ret->socket = s;
+	ret->ev = (struct event ){ .fd = s, .rdwr = EVENT_READ, .process = Process_upnphttp, .data = ret };
+	event_module.add(&ret->ev);
 	return ret;
 }
 
 void
 CloseSocket_upnphttp(struct upnphttp * h)
 {
-	if(close(h->socket) < 0)
+
+	event_module.del(&h->ev, EV_FLAG_CLOSING);
+	if(close(h->ev.fd) < 0)
 	{
-		DPRINTF(E_ERROR, L_HTTP, "CloseSocket_upnphttp: close(%d): %s\n", h->socket, strerror(errno));
+		DPRINTF(E_ERROR, L_HTTP, "CloseSocket_upnphttp: close(%d): %s\n", h->ev.fd, strerror(errno));
 	}
-	h->socket = -1;
+	h->ev.fd = -1;
 	h->state = 100;
 }
 
@@ -132,7 +140,7 @@ Delete_upnphttp(struct upnphttp * h)
 {
 	if(h)
 	{
-		if(h->socket >= 0)
+		if(h->ev.fd >= 0)
 			CloseSocket_upnphttp(h);
 		free(h->req_buf);
 		free(h->res_buf);
@@ -293,7 +301,7 @@ ParseHttpHeaders(struct upnphttp * h)
 					}
 
  					DPRINTF(E_DEBUG, L_HTTP, "Range Start-End: %lld - %lld\n",
-						(long long)h->req_RangeStart, h->req_RangeEnd);
+						(long long)h->req_RangeStart, (long long)h->req_RangeEnd);
  				}
 			}
 			else if(strncasecmp(line, "Host", 4)==0)
@@ -303,14 +311,14 @@ ParseHttpHeaders(struct upnphttp * h)
 				p = colon + 1;
 				while(isspace(*p))
 					p++;
-				for(n = 0; n<n_lan_addr; n++)
+				for(n = 0; n < n_lan_addr; n++)
 				{
-					for(i=0; lan_addr[n].str[i]; i++)
+					for(i = 0; lan_addr[n].str[i]; i++)
 					{
 						if(lan_addr[n].str[i] != p[i])
 							break;
 					}
-					if(!lan_addr[n].str[i])
+					if(i && !lan_addr[n].str[i])
 					{
 						h->iface = n;
 						break;
@@ -502,6 +510,7 @@ static void
 Send400(struct upnphttp * h)
 {
 	static const char body400[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>400 Bad Request</TITLE></HEAD>"
 		"<BODY><H1>Bad Request</H1>The request is invalid"
 		" for this HTTP version.</BODY></HTML>\r\n";
@@ -517,6 +526,7 @@ static void
 Send403(struct upnphttp * h)
 {
 	static const char body403[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>403 Forbidden</TITLE></HEAD>"
 		"<BODY><H1>Forbidden</H1>You don't have permission to access this resource."
 		"</BODY></HTML>\r\n";
@@ -532,6 +542,7 @@ static void
 Send404(struct upnphttp * h)
 {
 	static const char body404[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD>"
 		"<BODY><H1>Not Found</H1>The requested URL was not found"
 		" on this server.</BODY></HTML>\r\n";
@@ -547,6 +558,7 @@ static void
 Send406(struct upnphttp * h)
 {
 	static const char body406[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>406 Not Acceptable</TITLE></HEAD>"
 		"<BODY><H1>Not Acceptable</H1>An unsupported operation"
 		" was requested.</BODY></HTML>\r\n";
@@ -562,6 +574,7 @@ static void
 Send416(struct upnphttp * h)
 {
 	static const char body416[] =
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>416 Requested Range Not Satisfiable</TITLE></HEAD>"
 		"<BODY><H1>Requested Range Not Satisfiable</H1>The requested range"
 		" was outside the file's size.</BODY></HTML>\r\n";
@@ -577,6 +590,7 @@ void
 Send500(struct upnphttp * h)
 {
 	static const char body500[] = 
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>"
 		"<BODY><H1>Internal Server Error</H1>Server encountered "
 		"and Internal Error.</BODY></HTML>\r\n";
@@ -592,6 +606,7 @@ void
 Send501(struct upnphttp * h)
 {
 	static const char body501[] = 
+		"<!DOCTYPE html>"
 		"<HTML><HEAD><TITLE>501 Not Implemented</TITLE></HEAD>"
 		"<BODY><H1>Not Implemented</H1>The HTTP Method "
 		"is not implemented by this server.</BODY></HTML>\r\n";
@@ -653,31 +668,141 @@ SendResp_presentation(struct upnphttp * h)
 	v = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'v*'");
 	p = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'i*'");
 	strcatf(&str,
-		"<HTML><HEAD><TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE></HEAD>"
-		"<BODY><div style=\"text-align: center\">"
+		"<!DOCTYPE html>"
+		"<HTML>"
+			"<HEAD>"
+	);
+	if(GETFLAG(SCANNING_MASK)) { // during the scan, refresh the page every 5sec
+		strcatf(&str,
+				"<meta http-equiv=\"refresh\" content=\"5\"/>"
+		);
+	}
+	strcatf(&str,
+				"<TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE>"
+				// Technically, the browser should ask for a favicon on its own, but
+				// it seems that at least firefox sometimes has ideas of its own. It
+				// will aggressively cache favicons (and/or not ask for one). One
+				// trick that seems to somehow help is to append a question mark
+				// to the of the URL. For some unknown reason this seems to trigger
+				// firefox to always request the favicon, without even the need for
+				// a real 'cache buster'.
+				// C.f. http://stackoverflow.com/questions/8616016/favicon-not-displayed-by-firefox
+				// Note however that even though the icon is requested, firefox is
+				// *still* caching it. The only way to refresh it seems to be to
+				// just keep trying to refresh, stopping e.g. minidlna (so you get
+				// "Unable to connect", close the tab, reopen tab, etc, etc, until
+				// eventually the icon will update. Perhaps there is a timeout on
+				// refresh?
+				"<link rel=\"shortcut icon\" href=\"favicon.ico?\" />"
+				"<STYLE>"
+					"body {"
+						"font-family:" "'Helvetica Neue', Helvetica, Arial;"
+						"font-size:" "14px;"
+						"line-height:" "20px;"
+						"font-weight:" "400;"
+						"font-smoothing:" "antialiased;"
+						"color:" "#3b3b3b;"
+						"background:" "#dddddd;"
+					"}"
+
+					"div.content {"
+						"margin:" "auto;"
+						"max-width:" "100em;"
+					"}"
+
+					"table {"
+						"width:" "100%%;"
+						"box-shadow:" "0 1px 3px rgba(0,0,0,0.2);"
+						"border-collapse:" "collapse;"
+					"}"
+
+					"table tr {"
+						"background:" "#f6f6f6;"
+					"}"
+
+					"table tr:nth-of-type(odd) {"
+						"background:" "#e9e9e9;"
+					"}"
+
+					"table tr th {"
+						"padding:" "6px 12px;"
+						"font-weight:" "900;"
+						"color:" "#ffffff;"
+						"background:" "#2980b9;"
+						"text-align:" "left;"
+					"}"
+
+					"table tr td {"
+						"padding:" "6px 12px;"
+						"border-right:" "1px solid #ffffff;"
+					"}"
+
+					"table tr:nth-of-type(odd) td {"
+						"border-right:" "1px solid #f2f2f2;"
+					"}"
+
+					"table tr td:last-child {"
+						"border-right:" "0;"
+					"}"
+
+					"table tr td.numeric {"
+						"text-align:" "right;"
+					"}"
+
+					"form {"
+						"display:" "inline;"
+					"}"
+
+					"button {"
+						"width:" "20em;"
+						"margin-right:" "1em;"
+					"}"
+				"</STYLE>"
+			"</HEAD>"
+		"<BODY>"
+		"<div class=\"content\">"
+		"<div style=\"text-align: center\">"
 		"<h2>" SERVER_NAME " status</h2></div>");
 
 	strcatf(&str,
 		"<h3>Media library</h3>"
-		"<table border=1 cellpadding=10>"
-		"<tr><td>Audio files</td><td>%d</td></tr>"
-		"<tr><td>Video files</td><td>%d</td></tr>"
-		"<tr><td>Image files</td><td>%d</td></tr>"
+		"<table>"
+		"<tr><th>Audio files</th><th>Video files</th><th>Image files</th></tr>"
+		"<tr><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td><td class=\"numeric\">%d</td></tr>"
 		"</table>", a, v, p);
 
-	if (scanning)
-		strcatf(&str,
-			"<br><i>* Media scan in progress</i><br>");
+	// Full rescan button
+	strcatf(&str, "<br>"
+	              "<form method=\"post\" action=\"?action=DoFullMediaScan\">"
+	              "<button type=\"submit\"");
+	if (GETFLAG(SCANNING_MASK)) {
+		strcatf(&str, " disabled><i>Media scan in progress...</i>");
+	}
+	else {
+		strcatf(&str, ">Rebuild media library");
+	}
+	strcatf(&str, "</button></form>");
+
+	// Fast rescan button
+	strcatf(&str, "<form method=\"post\" action=\"?action=DoIncrementalMediaScan\">"
+	              "<button type=\"submit\" autofocus");
+	if (GETFLAG(SCANNING_MASK)) {
+		strcatf(&str, " disabled><i>Media scan in progress...</i>");
+	}
+	else {
+		strcatf(&str, ">Incremental update");
+	}
+	strcatf(&str, "</button></form><br><br>");
 
 	strcatf(&str,
 		"<h3>Connected clients</h3>"
-		"<table border=1 cellpadding=10>"
-		"<tr><td>ID</td><td>Type</td><td>IP Address</td><td>HW Address</td><td>Connections</td></tr>");
+		"<table>"
+		"<tr><th>ID</th><th>Type</th><th>IP Address</th><th>HW Address</th><th>Connections</th></tr>");
 	for (i = 0; i < CLIENT_CACHE_SLOTS; i++)
 	{
 		if (!clients[i].addr.s_addr)
 			continue;
-		strcatf(&str, "<tr><td>%d</td><td>%s</td><td>%s</td><td>%02X:%02X:%02X:%02X:%02X:%02X</td><td>%d</td></tr>",
+		strcatf(&str, "<tr><td class=\"numeric\">%d</td><td>%s</td><td>%s</td><td>%02X:%02X:%02X:%02X:%02X:%02X</td><td class=\"numeric\">%d</td></tr>",
 				i, clients[i].type->name, inet_ntoa(clients[i].addr),
 				clients[i].mac[0], clients[i].mac[1], clients[i].mac[2],
 				clients[i].mac[3], clients[i].mac[4], clients[i].mac[5], clients[i].connections);
@@ -685,9 +810,45 @@ SendResp_presentation(struct upnphttp * h)
 	strcatf(&str, "</table>");
 
 	strcatf(&str, "<br>%d connection%s currently open<br>", number_of_children, (number_of_children == 1 ? "" : "s"));
-	strcatf(&str, "</BODY></HTML>\r\n");
+	strcatf(&str, "</div></BODY></HTML>\r\n");
 
 	BuildResp_upnphttp(h, str.data, str.off);
+	SendResp_upnphttp(h);
+	CloseSocket_upnphttp(h);
+}
+
+static void
+DoMediaScan(struct upnphttp * h, int rebuild_db)
+{
+	if(!GETFLAG(SCANNING_MASK)) {
+		if(rebuild_db) {
+			db_clear(db);
+			char cmd[PATH_MAX*2];
+			snprintf(cmd, sizeof(cmd), "rm -rf %s/art_cache", db_path);
+			if (system(cmd) != 0)
+				DPRINTF(E_WARN, L_HTTP, "Failed to clean art cache!\n");
+			if(CreateDatabase() != 0) {
+				DPRINTF(E_FATAL, L_HTTP, "ERROR: Failed to create sqlite database!\n");
+			}
+		}
+		CLEARFLAG(RESCAN_MASK);
+		if(!rebuild_db)
+			SETFLAG(RESCAN_MASK);
+		start_scanner();
+	}
+	// Here we're redirecting the user back to the 'presentation' page through a
+	// http-equiv refresh, rather than just directly showing the 'presentation'
+	// page. The reason for this is that this action is a POST request, and is
+	// processed from ProcessHTTPPOST_upnphttp(). From there it's (currently)
+	// hard to get back into the parsing of a GET request.
+	const char body[] = "<!DOCTYPE html>"
+	                    "<HTML>"
+	                    "<HEAD>"
+	                    "<meta http-equiv=\"refresh\" content=\"0; url=/\"/>"
+	                    "</HEAD>"
+	                    "</HTML>";
+	h->respflags = FLAG_HTML;
+	BuildResp_upnphttp(h, body, sizeof(body) - 1);
 	SendResp_upnphttp(h);
 	CloseSocket_upnphttp(h);
 }
@@ -707,10 +868,23 @@ ProcessHTTPPOST_upnphttp(struct upnphttp * h)
 				h->req_soapAction,
 				h->req_soapActionLen);
 		}
-		else
-		{
+		else {
+			const char* query = strchr(h->req_buf, '?');
+			const char* newline = strchr(h->req_buf, '\n');
+			if(query<newline) { // query is part of the request URL
+				if(strncmp(query, "?action=", 8) == 0) { // action specifier
+					if(strncmp(query+8, "DoFullMediaScan", 15) == 0) {
+						return DoMediaScan(h, 1);
+					}
+					else if(strncmp(query+8, "DoIncrementalMediaScan", 22) == 0) {
+						return DoMediaScan(h, 0);
+					}
+				}
+			}
+
 			static const char err400str[] =
-				"<html><body>Bad request</body></html>";
+				"<!DOCTYPE html>"
+				"<HTML><BODY>Bad request</BODY></HTML>";
 			DPRINTF(E_WARN, L_HTTP, "No SOAPAction in HTTP headers\n");
 			h->respflags = FLAG_HTML;
 			BuildResp2_upnphttp(h, 400, "Bad Request",
@@ -736,7 +910,8 @@ check_event(struct upnphttp *h)
 		if (h->req_SID || !h->req_NT)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
-				            "<html><body>Bad request</body></html>", 37);
+				            "<!DOCTYPE html>"
+				            "<HTML><BODY>Bad request</BODY></HTML>", 37);
 			type = E_INVALID;
 		}
 		else if (strncmp(h->req_Callback, "http://", 7) != 0 ||
@@ -757,7 +932,8 @@ check_event(struct upnphttp *h)
 		if (h->req_NT)
 		{
 			BuildResp2_upnphttp(h, 400, "Bad Request",
-				            "<html><body>Bad request</body></html>", 37);
+				            "<!DOCTYPE html>"
+				            "<HTML><BODY>Bad request</BODY></HTML>", 37);
 			type = E_INVALID;
 		}
 		else
@@ -1004,6 +1180,10 @@ ProcessHttpQuery_upnphttp(struct upnphttp * h)
 		{
 			SendResp_albumArt(h, HttpUrl+10);
 		}
+		else if(strncmp(HttpUrl, "/MTA/", 5) == 0)
+		{
+			SendResp_mta(h, HttpUrl+5);
+		}
 		#ifdef TIVO_SUPPORT
 		else if(strncmp(HttpUrl, "/TiVoConnect", 12) == 0)
 		{
@@ -1030,6 +1210,10 @@ ProcessHttpQuery_upnphttp(struct upnphttp * h)
 		else if(strncmp(HttpUrl, "/Resized/", 9) == 0)
 		{
 			SendResp_resizedimg(h, HttpUrl+9);
+		}
+		else if(begins_with(HttpUrl, "/favicon.ico"))
+		{
+			SendResp_icon(h, "favicon.ico");
 		}
 		else if(strncmp(HttpUrl, "/icons/", 7) == 0)
 		{
@@ -1074,18 +1258,17 @@ ProcessHttpQuery_upnphttp(struct upnphttp * h)
 	}
 }
 
-
-void
-Process_upnphttp(struct upnphttp * h)
+static void
+Process_upnphttp(struct event *ev)
 {
 	char buf[2048];
+	struct upnphttp *h = ev->data;
 	int n;
-	if(!h)
-		return;
+
 	switch(h->state)
 	{
 	case 0:
-		n = recv(h->socket, buf, 2048, 0);
+		n = recv(h->ev.fd, buf, 2048, 0);
 		if(n<0)
 		{
 			DPRINTF(E_ERROR, L_HTTP, "recv (state0): %s\n", strerror(errno));
@@ -1131,7 +1314,7 @@ Process_upnphttp(struct upnphttp * h)
 		break;
 	case 1:
 	case 2:
-		n = recv(h->socket, buf, sizeof(buf), 0);
+		n = recv(h->ev.fd, buf, sizeof(buf), 0);
 		if(n < 0)
 		{
 			DPRINTF(E_ERROR, L_HTTP, "recv (state%d): %s\n", h->state, strerror(errno));
@@ -1185,7 +1368,7 @@ BuildHeader_upnphttp(struct upnphttp * h, int respcode,
 {
 	static const char httpresphead[] =
 		"%s %d %s\r\n"
-		"Content-Type: %s\r\n"
+		"Content-Type: text/%s; charset=\"utf-8\"\r\n"
 		"Connection: close\r\n"
 		"Content-Length: %d\r\n"
 		"Server: " MINIDLNA_SERVER_STRING "\r\n";
@@ -1204,7 +1387,7 @@ BuildHeader_upnphttp(struct upnphttp * h, int respcode,
 	res.off = 0;
 	strcatf(&res, httpresphead, "HTTP/1.1",
 	              respcode, respmsg,
-	              (h->respflags&FLAG_HTML)?"text/html":"text/xml; charset=\"utf-8\"",
+	              (h->respflags&FLAG_HTML)?"html":"xml",
 							 bodylen);
 	/* Additional headers */
 	if(h->respflags & FLAG_TIMEOUT) {
@@ -1258,7 +1441,7 @@ SendResp_upnphttp(struct upnphttp * h)
 {
 	int n;
 	DPRINTF(E_DEBUG, L_HTTP, "HTTP RESPONSE: %.*s\n", h->res_buflen, h->res_buf);
-	n = send(h->socket, h->res_buf, h->res_buflen, 0);
+	n = send(h->ev.fd, h->res_buf, h->res_buflen, 0);
 	if(n<0)
 	{
 		DPRINTF(E_ERROR, L_HTTP, "send(res_buf): %s\n", strerror(errno));
@@ -1276,7 +1459,7 @@ send_data(struct upnphttp * h, char * header, size_t size, int flags)
 {
 	int n;
 
-	n = send(h->socket, header, size, flags);
+	n = send(h->ev.fd, header, size, flags);
 	if(n<0)
 	{
 		DPRINTF(E_ERROR, L_HTTP, "send(res_buf): %s\n", strerror(errno));
@@ -1310,7 +1493,7 @@ send_file(struct upnphttp * h, int sendfd, off_t offset, off_t end_offset)
 		if( try_sendfile )
 		{
 			send_size = ( ((end_offset - offset) < MAX_BUFFER_SIZE) ? (end_offset - offset + 1) : MAX_BUFFER_SIZE);
-			ret = sys_sendfile(h->socket, sendfd, &offset, send_size);
+			ret = sys_sendfile(h->ev.fd, sendfd, &offset, send_size);
 			if( ret == -1 )
 			{
 				DPRINTF(E_DEBUG, L_HTTP, "sendfile error :: error no. %d [%s]\n", errno, strerror(errno));
@@ -1340,7 +1523,7 @@ send_file(struct upnphttp * h, int sendfd, off_t offset, off_t end_offset)
 			else
 				break;
 		}
-		ret = write(h->socket, buf, ret);
+		ret = write(h->ev.fd, buf, ret);
 		if( ret == -1 ) {
 			DPRINTF(E_DEBUG, L_HTTP, "write error :: error no. %d [%s]\n", errno, strerror(errno));
 			if( errno == EAGAIN )
@@ -1416,61 +1599,220 @@ static void
 SendResp_icon(struct upnphttp * h, char * icon)
 {
 	char header[512];
-	char mime[12] = "image/";
-	char *data;
-	int size;
+	char mime[16] = "image/";
+	char *data = NULL;
+	long size;
+	int fd;
 	struct string_s str;
 
-	if( strcmp(icon, "sm.png") == 0 )
-	{
-		DPRINTF(E_DEBUG, L_HTTP, "Sending small PNG icon\n");
-		data = (char *)png_sm;
-		size = sizeof(png_sm)-1;
-		strcpy(mime+6, "png");
-	}
-	else if( strcmp(icon, "lrg.png") == 0 )
-	{
-		DPRINTF(E_DEBUG, L_HTTP, "Sending large PNG icon\n");
-		data = (char *)png_lrg;
-		size = sizeof(png_lrg)-1;
-		strcpy(mime+6, "png");
-	}
-	else if( strcmp(icon, "sm.jpg") == 0 )
-	{
-		DPRINTF(E_DEBUG, L_HTTP, "Sending small JPEG icon\n");
-		data = (char *)jpeg_sm;
-		size = sizeof(jpeg_sm)-1;
-		strcpy(mime+6, "jpeg");
-	}
-	else if( strcmp(icon, "lrg.jpg") == 0 )
-	{
-		DPRINTF(E_DEBUG, L_HTTP, "Sending large JPEG icon\n");
-		data = (char *)jpeg_lrg;
-		size = sizeof(jpeg_lrg)-1;
-		strcpy(mime+6, "jpeg");
+	char *path;
+	char buf[PATH_MAX];
+	snprintf(buf, sizeof(buf), "%s/%s", icon_path, icon);
+	path = buf;
+	fd = open(path, O_RDONLY);
+	if( fd < 0 ) {
+		if( strcmp(icon, "sm.png") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending small PNG icon\n");
+			data = (char *)png_sm;
+			size = sizeof(png_sm)-1;
+		}
+		else if( strcmp(icon, "lrg.png") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending large PNG icon\n");
+			data = (char *)png_lrg;
+			size = sizeof(png_lrg)-1;
+		}
+		else if( strcmp(icon, "sm.jpg") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending small JPEG icon\n");
+			data = (char *)jpeg_sm;
+			size = sizeof(jpeg_sm)-1;
+		}
+		else if( strcmp(icon, "lrg.jpg") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending large JPEG icon\n");
+			data = (char *)jpeg_lrg;
+			size = sizeof(jpeg_lrg)-1;
+		}
+		else if( strcmp(icon, "favicon.ico") == 0 )
+		{
+			DPRINTF(E_DEBUG, L_HTTP, "Sending favicon\n");
+			data = (char *)favicon;
+			size = sizeof(favicon)-1;
+		}
+		else
+		{
+			DPRINTF(E_WARN, L_HTTP, "Invalid icon request: %s\n", icon);
+			Send404(h);
+			return;
+		}
 	}
 	else
 	{
-		DPRINTF(E_WARN, L_HTTP, "Invalid icon request: %s\n", icon);
-		Send404(h);
-		return;
+		DPRINTF(E_DEBUG, L_HTTP, "Sending custom icon: '%s/%s'\n", icon_path, icon);
+		size = lseek(fd, 0, SEEK_END);
+		lseek(fd, 0, SEEK_SET);
+	}
+	if( ends_with(icon, ".jpg") )
+	{
+		strcpy(mime+6, "jpeg");
+	}
+	else if( ends_with(icon, ".png") )
+	{
+		strcpy(mime+6, "png");
+	}
+	else if( ends_with(icon, ".ico") )
+	{
+		strcpy(mime+6, "x-icon");
 	}
 
 	INIT_STR(str, header);
 
 	start_dlna_header(&str, 200, "Interactive", mime);
-	strcatf(&str, "Content-Length: %d\r\n\r\n", size);
+	strcatf(&str, "Content-Length: %ld\r\n\r\n", size);
 
 	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )
 	{
 		if( h->req_command != EHead )
-			send_data(h, data, size, 0);
+		{
+			if(fd<0)
+			{
+				send_data(h, data, size, 0);
+			}
+			else
+			{
+				send_file(h, fd, 0, size-1);
+			}
+		}
 	}
 	CloseSocket_upnphttp(h);
+	if(fd>=0) {
+		close(fd);
+	}
 }
 
 static void
-SendResp_albumArt(struct upnphttp * h, char * object)
+SendResp_albumArt(struct upnphttp * h, char * url)
+{
+	char header[512];
+	char *path, *albumart_path;
+	char *tmode;
+	off_t size;
+	struct string_s str;
+
+	if( h->reqflags & (FLAG_XFERSTREAMING|FLAG_RANGE) )
+	{
+		DPRINTF(E_WARN, L_HTTP, "Client tried to specify transferMode as Streaming with an image!\n");
+		Send406(h);
+		return;
+	}
+
+	long long id = strtoll(url, NULL, 10);
+	const char *suffix = strrchr(url, '-');
+
+	path = sql_get_text_field(db, "SELECT PATH from DETAILS where ID = %lld", id);
+	if( !path || !suffix)
+	{
+		DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s not found, responding ERROR 404\n", url);
+		Send404(h);
+		return;
+	}
+
+#if USE_FORK
+	pid_t newpid = -1;
+#endif /* USE_FORK */
+
+	long long size_type = strtoll(suffix + 1, NULL, 10);
+	const image_size_type_t *image_size_type = get_image_size_type((image_size_type_enum)size_type);
+	if(image_size_type->type == JPEG_INV)
+	{
+		DPRINTF(E_ERROR, L_HTTP, "Invalid image size '%s' requested, responding ERROR 404\n", url);
+		Send404(h);
+		return;
+	}
+	art_cache_path(image_size_type, ".jpg", path, &albumart_path);
+
+	int fd = _open_file(albumart_path);
+	if (fd < 0) {
+		if (fd == -403) {
+			Send403(h);
+			goto albumart_error;
+		}
+		DPRINTF(E_DEBUG, L_HTTP, "Album art doesn't exist in cache, adding new entry %s\n", albumart_path);
+#if USE_FORK
+		// XXX: Don't we need to wait a bit here??
+		newpid = process_fork(h->req_client);
+		if (newpid > 0)
+		{
+			CloseSocket_upnphttp(h);
+			goto albumart_error;
+		}
+#endif
+		char *fullsize_albumart_path = NULL;
+		if(art_cache_path(NULL, ".jpg", path, &fullsize_albumart_path))
+		{
+			int ret = save_resized_album_art_from_file_to_file(fullsize_albumart_path, albumart_path, image_size_type);
+			free(fullsize_albumart_path);
+			if (ret != 0)
+			{
+				DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s not found, responding ERROR 404\n", url, image_size_type->name);
+				Send404(h);
+				goto albumart_error;
+			}
+		}
+		else
+		{
+			DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s-%s: Could not format path to full-size album art for '%s', responding ERROR 404\n", url, image_size_type->name, path);
+			Send404(h);
+			goto albumart_error;
+		}
+
+		fd = open(albumart_path, O_RDONLY);
+	}
+
+	if( fd < 0 ) {
+		DPRINTF(E_ERROR, L_HTTP, "Error opening %s\n", albumart_path);
+		Send404(h);
+		goto albumart_error;
+	}
+
+	DPRINTF(E_INFO, L_HTTP, "Serving album art ID: %lld [%s]\n", id, albumart_path);
+
+	size = lseek(fd, 0, SEEK_END);
+	lseek(fd, 0, SEEK_SET);
+
+	INIT_STR(str, header);
+
+#if USE_FORK
+	if (newpid == 0 && (h->reqflags & FLAG_XFERBACKGROUND) && (setpriority(PRIO_PROCESS, 0, 19) == 0))
+		tmode = "Background";
+	else
+#endif
+	tmode = "Interactive";
+	start_dlna_header(&str, 200, tmode, "image/jpeg");
+	strcatf(&str, "Content-Length: %jd\r\n"
+	              "contentFeatures.dlna.org: DLNA.ORG_PN=%s\r\n\r\n",
+	              (intmax_t)size, image_size_type->name);
+
+	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )
+	{
+		if( h->req_command != EHead )
+			send_file(h, fd, 0, size-1);
+	}
+	close(fd);
+
+albumart_error:
+	sqlite3_free(path);
+	free(albumart_path);
+#if USE_FORK
+	if (newpid == 0)
+		_exit(0);
+#endif
+}
+
+static void
+SendResp_mta(struct upnphttp * h, char * object)
 {
 	char header[512];
 	char *path;
@@ -1478,6 +1820,7 @@ SendResp_albumArt(struct upnphttp * h, char * object)
 	long long id;
 	int fd;
 	struct string_s str;
+	const char *tmode;
 
 	if( h->reqflags & (FLAG_XFERSTREAMING|FLAG_RANGE) )
 	{
@@ -1488,42 +1831,61 @@ SendResp_albumArt(struct upnphttp * h, char * object)
 
 	id = strtoll(object, NULL, 10);
 
-	path = sql_get_text_field(db, "SELECT PATH from ALBUM_ART where ID = '%lld'", id);
+	path = sql_get_text_field(db, "SELECT PATH from MTA where ID = '%lld'", id);
 	if( !path )
 	{
-		DPRINTF(E_WARN, L_HTTP, "ALBUM_ART ID %s not found, responding ERROR 404\n", object);
+		DPRINTF(E_WARN, L_HTTP, "MTA ID %s not found, responding ERROR 404\n", object);
 		Send404(h);
 		return;
 	}
-	DPRINTF(E_INFO, L_HTTP, "Serving album art ID: %lld [%s]\n", id, path);
-
-	fd = _open_file(path);
-	if( fd < 0 ) {
-		sqlite3_free(path);
-		if (fd == -403)
-			Send403(h);
-		else
-			Send404(h);
-		return;
+#if USE_FORK
+	pid_t newpid = 0;
+	newpid = process_fork(h->req_client);
+	if( newpid > 0 )
+	{
+		goto mta_error;
 	}
+#endif
+	DPRINTF(E_INFO, L_HTTP, "Serving MTA file ID: %lld [%s]\n", id, path);
+
+	fd = open(path, O_RDONLY);
+	if( fd < 0 ) {
+		DPRINTF(E_ERROR, L_HTTP, "Error opening %s\n", path);
+		sqlite3_free(path);
+		Send404(h);
+		goto mta_error;
+	}
+
 	sqlite3_free(path);
 	size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
 
 	INIT_STR(str, header);
 
-	start_dlna_header(&str, 200, "Interactive", "image/jpeg");
+#if USE_FORK
+	if( (h->reqflags & FLAG_XFERBACKGROUND) && (setpriority(PRIO_PROCESS, 0, 19) == 0) )
+		tmode = "Background";
+	else
+#endif
+		tmode = "Interactive";
+
+	start_dlna_header(&str, 200, tmode, "image/jpeg");
 	strcatf(&str, "Content-Length: %jd\r\n"
-	              "contentFeatures.dlna.org: DLNA.ORG_PN=JPEG_TN\r\n\r\n",
-	              (intmax_t)size);
+	              "contentFeatures.dlna.org: DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=%08X%024X\r\n\r\n",
+	              (intmax_t)size, DLNA_FLAG_DLNA_V1_5|DLNA_FLAG_TM_B|DLNA_FLAG_TM_S, 0);
 
 	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )
-	{
 		if( h->req_command != EHead )
 			send_file(h, fd, 0, size-1);
-	}
+
 	close(fd);
+mta_error:
 	CloseSocket_upnphttp(h);
+#if USE_FORK
+	if( newpid == 0 )
+		_exit(0);
+#endif
+
 }
 
 static void
@@ -2084,9 +2446,10 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 
 	if( h->reqflags & FLAG_CAPTION )
 	{
+		char buf[LOCATION_URL_MAX_LEN] = {};
+		const char* host = get_location_url_by_lan_addr(buf, h->iface);
 		if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%lld'", (long long)id) > 0 )
-			strcatf(&str, "CaptionInfo.sec: http://%s:%d/Captions/%lld.srt\r\n",
-			              lan_addr[h->iface].str, runtime_vars.port, (long long)id);
+			strcatf(&str, "CaptionInfo.sec: %s/Captions/%lld.srt\r\n", host, (long long)id);
 	}
 
 	strcatf(&str, "Accept-Ranges: bytes\r\n"

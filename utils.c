@@ -1,5 +1,5 @@
 /* MiniDLNA media server
- * Copyright (C) 2008-2009  Justin Maggard
+ * Copyright (C) 2008-2017  Justin Maggard
  *
  * This file is part of MiniDLNA.
  *
@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <libgen.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -61,9 +62,21 @@ ends_with(const char * haystack, const char * needle)
 
 	if( nlen > hlen )
 		return 0;
- 	end = haystack + hlen - nlen;
+	end = haystack + hlen - nlen;
 
 	return (strcasecmp(end, needle) ? 0 : 1);
+}
+
+int
+begins_with(const char * haystack, const char * needle)
+{
+	int nlen = strlen(needle);
+	int hlen = strlen(haystack);
+
+	if( hlen < nlen )
+		return 0;
+
+	return (strncasecmp(haystack, needle, nlen) ? 0 : 1);
 }
 
 char *
@@ -231,10 +244,26 @@ escape_tag(const char *tag, int force_alloc)
 }
 
 char *
+duration_str(int msec)
+{
+	char *str;
+
+	xasprintf(&str, "%d:%02d:%02d.%03d",
+			(msec / 3600000),
+			(msec / 60000 % 60),
+			(msec / 1000 % 60),
+			(msec % 1000));
+
+	return str;
+}
+
+char *
 strip_ext(char *name)
 {
 	char *period;
 
+	if (!name)
+		return NULL;
 	period = strrchr(name, '.');
 	if (period)
 		*period = '\0';
@@ -282,7 +311,7 @@ make_dir(char * path, mode_t mode)
 				return -1;
 			}
 		}
-	        if (!c)
+		if (!c)
 			return 0;
 
 		/* Remove any inserted nul from the path. */
@@ -291,9 +320,61 @@ make_dir(char * path, mode_t mode)
 	} while (1);
 }
 
+int
+copy_file(const char *src_file, const char *dst_file)
+{
+	char buf[MAXPATHLEN];
+	size_t nread;
+	size_t nwritten = 0;
+	size_t size = 0;
+
+	strncpyt(buf, dst_file, sizeof(buf));
+	make_dir(dirname(buf), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+
+	FILE *fsrc = fopen(src_file, "rb");
+	FILE *fdst = fopen(dst_file, "wb");
+
+	while ((nread = fread(buf, 1, sizeof(buf), fsrc)) > 0)
+	{
+		size += nread;
+		nwritten += fwrite(buf, 1, nread, fdst);
+	}
+
+	fclose(fsrc);
+	fclose(fdst);
+
+	if (nwritten != size)
+	{
+		DPRINTF(E_WARN, L_ARTWORK, "copying %s to %s failed [%s]\n", src_file, dst_file, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int
+link_file(const char *src_file, const char *dst_file)
+{
+	if (link(src_file, dst_file) == 0)
+		return 0;
+
+	if (errno == ENOENT)
+	{
+		char *dir = strdup(dst_file);
+		make_dir(dirname(dir), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+		free(dir);
+		if (link(src_file, dst_file) == 0)
+			return 0;
+		/* try a softlink if all else fails */
+		if (symlink(src_file, dst_file) == 0)
+			return 0;
+	}
+	DPRINTF(E_INFO, L_GENERAL, "Linking %s to %s failed [%s]\n", src_file, dst_file, strerror(errno));
+	return -1;
+}
+
 /* Simple, efficient hash function from Daniel J. Bernstein */
 unsigned int
-DJBHash(uint8_t *data, int len)
+DJBHash(const uint8_t *data, int len)
 {
 	unsigned int hash = 5381;
 	unsigned int i = 0;
@@ -331,6 +412,8 @@ mime_to_ext(const char * mime)
 				return "3gp";
 			else if( strcmp(mime, "application/ogg") == 0 )
 				return "ogg";
+			else if( strcmp(mime+6, "x-dsd") == 0 )
+				return "dsd";
 			break;
 		case 'v':
 			if( strcmp(mime+6, "avi") == 0 )
@@ -398,7 +481,8 @@ is_audio(const char * file)
 		ends_with(file, ".m4a") || ends_with(file, ".aac")  ||
 		ends_with(file, ".mp4") || ends_with(file, ".m4p")  ||
 		ends_with(file, ".wav") || ends_with(file, ".ogg")  ||
-		ends_with(file, ".pcm") || ends_with(file, ".3gp"));
+		ends_with(file, ".pcm") || ends_with(file, ".3gp")  ||
+		ends_with(file, ".dsf") || ends_with(file, ".dff"));
 }
 
 int
@@ -413,10 +497,55 @@ is_playlist(const char * file)
 	return (ends_with(file, ".m3u") || ends_with(file, ".pls"));
 }
 
+// List of common subtitle formats, taken from https://en.wikipedia.org/wiki/Subtitle_(captioning)
+const char* subtitle_formats[] = {
+	".aqt",    // AQTitle
+	".ass",    // Advanced SubStation Alpha
+	".gsub",   // Gloss Subtitle
+	".jss",    // JACOSub
+	".pjs",    // Phoenix Subtitle
+	".psb",    // PowerDivX
+	".rt",     // RealText
+	".smi",    // SAMI
+	".srt",    // SubRip
+	".ssa",    // SubStation Alpha
+	".ssf",    // Structured Subtitle Format
+	".stl",    // Spruce subtitle format[15]
+	".sub",    // MPSub, MicroDVD, SubViewer, VobSub (also needs .idx)
+	".ttxt",   // MPEG-4 Timed Text
+	".usf",    // Universal Subtitle Format
+};
+
 int
 is_caption(const char * file)
 {
-	return (ends_with(file, ".srt") || ends_with(file, ".smi"));
+	const char** subtitle_format = &subtitle_formats[0];
+	do {
+		if(ends_with(file, *subtitle_format))
+			return 1;
+	} while(*++subtitle_format);
+	return 0;
+}
+
+media_types
+get_media_type(const char *file)
+{
+	const char *ext = strrchr(file, '.');
+	if (!ext)
+		return NO_MEDIA;
+	if (is_image(ext))
+		return TYPE_IMAGE;
+	if (is_video(ext))
+		return TYPE_VIDEO;
+	if (is_audio(ext))
+		return TYPE_AUDIO;
+	if (is_playlist(ext))
+		return TYPE_PLAYLIST;
+	if (is_caption(ext))
+		return TYPE_CAPTION;
+	if (is_nfo(ext))
+		return TYPE_NFO;
+	return NO_MEDIA;
 }
 
 int
@@ -442,11 +571,34 @@ is_album_art(const char * name)
 	return (album_art_name ? 1 : 0);
 }
 
+#define IGNORE_FILENAME ".mediaignore"
+#define IGNOREALL_FILENAME ".mediaignoreall"
+int
+has_ignore(const char * dir, int checkboth)
+{
+	char path[PATH_MAX];
+	int spfr;
+	int hignore = 0;
+	char *ignore_path = path;
+
+	spfr = snprintf(ignore_path, PATH_MAX, "%s/" IGNOREALL_FILENAME, dir);
+	if( spfr > 0 && spfr < PATH_MAX)
+		hignore = !access(ignore_path, F_OK);
+	if( !hignore  && checkboth)
+	{
+		spfr = snprintf(ignore_path, PATH_MAX, "%s/" IGNORE_FILENAME, dir);
+		if( spfr > 0 && spfr < PATH_MAX)
+			hignore = !access(ignore_path, F_OK);
+	}
+
+	return hignore;
+}
+
 int
 resolve_unknown_type(const char * path, media_types dir_type)
 {
 	struct stat entry;
-	unsigned char type = TYPE_UNKNOWN;
+	enum file_types type = TYPE_UNKNOWN;
 	char str_buf[PATH_MAX];
 	ssize_t len;
 
@@ -473,33 +625,123 @@ resolve_unknown_type(const char * path, media_types dir_type)
 		}
 		else if( S_ISREG(entry.st_mode) )
 		{
-			switch( dir_type )
-			{
-				case ALL_MEDIA:
-					if( is_image(path) ||
-					    is_audio(path) ||
-					    is_video(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_AUDIO:
-					if( is_audio(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_VIDEO:
-					if( is_video(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_IMAGES:
-					if( is_image(path) )
-						type = TYPE_FILE;
-					break;
-				default:
-					break;
-			}
+			media_types mtype = get_media_type(path);
+			if (dir_type & mtype)
+				type = TYPE_FILE;
 		}
 	}
 	return type;
 }
 
+char*
+base64_encode(const unsigned char *data, size_t ilen, size_t *olen)
+{
+	static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+					"abcdefghijklmnopqrstuvwxyz"
+					"0123456789+/";
+
+	unsigned char a,b,c;
+	unsigned int idx;
+	unsigned int i , j, s;
+	char *obuff;
+	size_t osize;
+
+	if ( !data  || !ilen )
+		return 0;
+
+	osize = 4 *((ilen + 2) / 3);
+	obuff = malloc(osize);
+
+	if ( !obuff )
+		return 0;
+
+	s = ilen - (ilen % 3);
+
+	for (i = 0, j = 0; i < s;)
+	{
+		a = data[i++];
+		b = data[i++];
+		c = data[i++];
+
+		idx = (a << 16) + (b << 8) + c;
+		obuff[j++] = table[(idx >> 3 * 6) & 0x3F];
+		obuff[j++] = table[(idx >> 2 * 6) & 0x3F];
+		obuff[j++] = table[(idx >> 6) & 0x3F];
+		obuff[j++] = table[idx & 0x3F];
+	}
+	if (s < ilen)
+	{
+		a = data[i++];
+		b = i < ilen ? data[i++] : 0;
+		c = 0;
+
+		idx = (a << 16) + (b << 8) + c;
+		obuff[j++] = table[(idx >> 3 * 6) & 0x3F];
+		obuff[j++] = table[(idx >> 2 * 6) & 0x3F];
+		obuff[j++] = table[(idx >> 6) & 0x3F];
+		obuff[j++] = table[idx & 0x3F];
+
+		obuff[osize -1] = '=';
+
+		if ( (ilen % 3) == 1)
+			obuff[osize - 2] = '=';
+	}
+
+	*olen = osize;
+
+	return obuff;
+}
+
+media_types
+valid_media_types(const char *path)
+{
+	struct media_dir_s *media_dir;
+
+	for (media_dir = media_dirs; media_dir; media_dir = media_dir->next)
+	{
+		if (strncmp(path, media_dir->path, strlen(media_dir->path)) == 0)
+			return media_dir->types;
+	}
+
+	return ALL_MEDIA;
+}
+
+/*
+ * Add and subtract routines for timevals.
+ * N.B.: subtract routine doesn't deal with
+ * results which are before the beginning,
+ * it just gets very confused in this case.
+ * Caveat emptor.
+ */
+static void	timevalfix(struct timeval *);
+void
+timevaladd(struct timeval *t1, const struct timeval *t2)
+{
+
+	t1->tv_sec += t2->tv_sec;
+	t1->tv_usec += t2->tv_usec;
+	timevalfix(t1);
+}
+
+void
+timevalsub(struct timeval *t1, const struct timeval *t2)
+{
+
+	t1->tv_sec -= t2->tv_sec;
+	t1->tv_usec -= t2->tv_usec;
+	timevalfix(t1);
+}
+
+static void
+timevalfix(struct timeval *t1)
+{
+
+	if (t1->tv_usec < 0) {
+		t1->tv_sec--;
+		t1->tv_usec += 1000000;
+	}
+	if (t1->tv_usec >= 1000000) {
+		t1->tv_sec++;
+		t1->tv_usec -= 1000000;
+	}
+}

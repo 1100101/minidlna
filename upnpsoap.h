@@ -32,6 +32,8 @@
 	" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\""
 #define PV_NAMESPACE \
 	" xmlns:pv=\"http://www.pv.com/pvns/\""
+#define SEC_NAMESPACE \
+	" xmlns:sec=\"http://www.sec.co.kr/dlna\""
 
 struct Response
 {
@@ -41,7 +43,7 @@ struct Response
 	int requested;
 	int iface;
 	uint32_t filter;
-	uint32_t flags;
+	uint64_t flags;
 	enum client_types client;
 };
 
@@ -51,4 +53,3 @@ void
 ExecuteSoapAction(struct upnphttp *, const char *, int);
 
 #endif
-

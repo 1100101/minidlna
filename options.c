@@ -45,12 +45,14 @@ static const struct {
 	{ UPNPIFNAME, "network_interface" },
 	{ UPNPPORT, "port" },
 	{ UPNPPRESENTATIONURL, "presentation_url" },
+	{ UPNPLOCATIONURLOVERRIDE, "location_url" },
 	{ UPNPNOTIFY_INTERVAL, "notify_interval" },
 	{ UPNPUUID, "uuid"},
 	{ UPNPSERIAL, "serial"},
 	{ UPNPMODEL_NAME, "model_name"},
 	{ UPNPMODEL_NUMBER, "model_number"},
 	{ UPNPFRIENDLYNAME, "friendly_name"},
+	{ UPNPICONDIR, "icon_dir" },
 	{ UPNPMEDIADIR, "media_dir"},
 	{ UPNPALBUMART_NAMES, "album_art_names"},
 	{ UPNPINOTIFY, "inotify" },
@@ -65,7 +67,14 @@ static const struct {
 	{ FORCE_SORT_CRITERIA, "force_sort_criteria" },
 	{ MAX_CONNECTIONS, "max_connections" },
 	{ MERGE_MEDIA_DIRS, "merge_media_dirs" },
-	{ WIDE_LINKS, "wide_links" }
+	{ WIDE_LINKS, "wide_links" },
+	{ TIVO_DISCOVERY, "tivo_discovery" },
+#ifdef ENABLE_VIDEO_THUMB
+	{ ENABLE_THUMB, "enable_thumbnail" },
+	{ THUMB_WIDTH, "thumbnail_width" },
+#endif
+	{ ENABLE_MTA, "enable_mta" },
+	{ ENABLE_SUBTITLES, "enable_subtitles" },
 };
 
 int

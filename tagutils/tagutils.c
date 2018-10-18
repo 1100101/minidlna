@@ -21,6 +21,7 @@
 
 /* This file is derived from mt-daapd project */
 
+#include "config.h"
 #include <ctype.h>
 #include <errno.h>
 #include <id3tag.h>
@@ -32,11 +33,12 @@
 #include <time.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#ifdef HAVE_VORBISFILE
 #include <ogg/ogg.h>
 #include <vorbis/codec.h>
+#endif
 #include <FLAC/metadata.h>
 
-#include "config.h"
 #ifdef HAVE_ICONV
 #include <iconv.h>
 #endif
@@ -102,11 +104,15 @@ char *winamp_genre[] = {
  */
 #include "tagutils-mp3.h"
 #include "tagutils-aac.h"
+#ifdef HAVE_VORBISFILE
 #include "tagutils-ogg.h"
+#endif
 #include "tagutils-flc.h"
 #include "tagutils-asf.h"
 #include "tagutils-wav.h"
 #include "tagutils-pcm.h"
+#include "tagutils-dsf.h"
+#include "tagutils-dff.h"
 
 static int _get_tags(char *file, struct song_metadata *psong);
 static int _get_fileinfo(char *file, struct song_metadata *psong);
@@ -123,14 +129,18 @@ typedef struct {
 } taghandler;
 
 static taghandler taghandlers[] = {
-	{ "aac", _get_aactags, _get_aacfileinfo                                  },
-	{ "mp3", _get_mp3tags, _get_mp3fileinfo                                  },
-	{ "flc", _get_flctags, _get_flcfileinfo                                  },
-	{ "ogg", 0,            _get_oggfileinfo                                  },
-	{ "asf", 0,            _get_asffileinfo                                  },
-	{ "wav", _get_wavtags, _get_wavfileinfo                                  },
-	{ "pcm", 0,            _get_pcmfileinfo                                  },
-	{ NULL,  0 }
+	{ "aac", _get_aactags,	_get_aacfileinfo },
+	{ "mp3", _get_mp3tags,	_get_mp3fileinfo },
+	{ "flc", _get_flctags,	_get_flcfileinfo },
+#ifdef HAVE_VORBISFILE
+	{ "ogg", NULL,		_get_oggfileinfo },
+#endif
+	{ "asf", NULL,		_get_asffileinfo },
+	{ "wav", _get_wavtags,	_get_wavfileinfo },
+	{ "pcm", NULL,		_get_pcmfileinfo },
+	{ "dsf", _get_dsftags,	_get_dsffileinfo },
+	{ "dff", NULL,		_get_dfffileinfo },
+	{ NULL,  NULL, NULL }
 };
 
 
@@ -139,12 +149,16 @@ static taghandler taghandlers[] = {
 #include "tagutils-misc.c"
 #include "tagutils-mp3.c"
 #include "tagutils-aac.c"
+#ifdef HAVE_VORBISFILE
 #include "tagutils-ogg.c"
+#endif
 #include "tagutils-flc.c"
 #include "tagutils-asf.c"
 #include "tagutils-wav.c"
 #include "tagutils-pcm.c"
 #include "tagutils-plist.c"
+#include "tagutils-dsf.c"
+#include "tagutils-dff.c"
 
 //*********************************************************************************
 // freetags()

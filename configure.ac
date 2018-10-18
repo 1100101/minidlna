@@ -68,6 +68,7 @@ AC_C_BIGENDIAN
 AC_FUNC_FORK
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_CHECK_FUNCS([gethostname getifaddrs gettimeofday inet_ntoa memmove memset mkdir realpath select sendfile setlocale socket strcasecmp strchr strdup strerror strncasecmp strpbrk strrchr strstr strtol strtoul])
+AC_CHECK_DECLS([SEEK_HOLE])
 
 #
 # Check for struct ip_mreqn
@@ -160,6 +161,24 @@ PKG_CHECK_MODULES([LIBAVCODEC], ["libavcodec"],, AC_MSG_ERROR("avcodec is not av
 AC_CHECK_HEADERS([libavcodec/avcodec.h libavformat/avformat.h libavutil/avutil.h],,
                  [AC_CHECK_HEADERS([ffmpeg/avcodec.h ffmpeg/avformat.h ffmpeg/avutil.h],,
                  [AC_MSG_ERROR("FFmpeg headers are missing!")])])
+
+CPPFLAGS_SAVE="$CPPFLAGS"
+for dir in "" /usr/local $INCLUDE_DIR; do
+    if test -n "$dir"; then
+        CPPFLAGS="$CPPFLAGS_SAVE -I$dir"
+    fi
+    AC_CHECK_HEADERS([libswscale/swscale.h ffmpeg/libswscale/swscale.h libav/libswscale/swscale.h swscale.h ffmpeg/swscale.h libav/swscale.h], [HAVE_LIBSWSCALE=1])
+    if test -z "$HAVE_LIBSWSCALE"; then
+        unset ac_cv_header_swscale_h
+        unset ac_cv_header_libswscale_swscale_h
+        unset ac_cv_header_ffmpeg_swscale_h
+        unset ac_cv_header_ffmpeg_libswscale_swscale_h
+        unset ac_cv_header_libav_swscale_h
+        unset ac_cv_header_libav_libswscale_swscale_h
+        continue
+    fi
+    break
+done
 
 CPPFLAGS_SAVE="$CPPFLAGS"
 for dir in "" /usr/local $INCLUDE_DIR; do
@@ -392,12 +411,11 @@ AC_CHECK_LIB(pthread, pthread_create)
 # prior versions had ov_open_callbacks in libvorbis, test that, too.
 AC_CHECK_LIB(vorbisfile, ov_open_callbacks,
         [AC_CHECK_HEADERS([vorbis/vorbisfile.h],
-          AM_CONDITIONAL(HAVE_VORBISFILE, true)
-          AC_DEFINE(HAVE_VORBISFILE,1,[Have vorbisfile]),
-          AM_CONDITIONAL(HAVE_VORBISFILE, false)
-          AC_DEFINE(HAVE_VORBISFILE,0,[lacking vorbisfile]))],
-          AM_CONDITIONAL(HAVE_VORBISFILE, false),
-          -lvorbis -logg)
+         AM_CONDITIONAL(HAVE_VORBISFILE, true)
+         AC_DEFINE(HAVE_VORBISFILE,1,[Have vorbisfile]),
+         AM_CONDITIONAL(HAVE_VORBISFILE, false))],
+         AM_CONDITIONAL(HAVE_VORBISFILE, false),
+         -lvorbis -logg)
 AC_CHECK_LIB(FLAC, FLAC__stream_decoder_init_stream,
         [AC_CHECK_HEADERS([FLAC/all.h],
          AM_CONDITIONAL(HAVE_FLAC, true)
@@ -415,6 +433,14 @@ AC_CHECK_LIB(vorbisfile, vorbis_comment_query,
         AM_CONDITIONAL(NEED_VORBIS, false),
         AM_CONDITIONAL(NEED_VORBIS, true),
         -logg)
+
+AC_CHECK_LIB(avahi-client, avahi_threaded_poll_new,
+        [AC_CHECK_HEADERS([avahi-common/thread-watch.h],
+         AM_CONDITIONAL(HAVE_AVAHI, true)
+         AC_DEFINE(HAVE_AVAHI,1,[Have avahi]),
+         AM_CONDITIONAL(HAVE_AVAHI, false))],
+         AM_CONDITIONAL(HAVE_AVAHI, false),
+        -lavahi-client -lavahi-common)
 
 ################################################################################################################
 ### Header checks
@@ -443,6 +469,8 @@ AC_CHECK_FUNCS(inotify_init, AC_DEFINE(HAVE_INOTIFY,1,[Whether kernel has inotif
          ])
 ])
 
+AC_CHECK_FUNCS(kqueue, AM_CONDITIONAL(HAVE_KQUEUE, true), AM_CONDITIONAL(HAVE_KQUEUE, false))
+
 ################################################################################################################
 ### Build Options
 
@@ -456,6 +484,11 @@ AC_ARG_WITH(dbpath,
 	AS_HELP_STRING([--with-dbpath=PATH],[Default DB path]),
 	[with_dbpath="$withval"],[with_dbpath="/var/cache/minidlna"])
 AC_DEFINE_UNQUOTED([DEFAULT_DB_PATH],"${with_dbpath}",[DB path])
+
+AC_ARG_WITH(iconpath,
+	AS_HELP_STRING([--with-iconpath=PATH],[Default Icon path]),
+	[with_iconpath="$withval"],[with_iconpath="/usr/share/minidlna"])
+AC_DEFINE_UNQUOTED([DEFAULT_ICON_PATH],"${with_iconpath}",[Icon path])
 
 AC_ARG_WITH(osname,
 	AS_HELP_STRING([--with-osname=NAME],[OS Name]),
@@ -478,11 +511,14 @@ AC_ARG_ENABLE(tivo,
 	[  --enable-tivo           enable TiVo support],[
 	if test "$enableval" = "yes"; then
 		AC_DEFINE(TIVO_SUPPORT, 1, [Define to 1 if you want to enable TiVo support])
+		AM_CONDITIONAL(TIVO_SUPPORT, true)
 		AC_MSG_RESULT([yes])
 	else
+		AM_CONDITIONAL(TIVO_SUPPORT, false)
 		AC_MSG_RESULT([no])
 	fi
 	],[
+		AM_CONDITIONAL(TIVO_SUPPORT, false)
 		AC_MSG_RESULT([no])
 	]
 )
@@ -518,7 +554,23 @@ AC_ARG_ENABLE(readynas,
 		AC_DEFINE_UNQUOTED([ROOTDEV_MANUFACTURER],"NETGEAR")
 		AC_DEFINE_UNQUOTED([ROOTDEV_MODELNAME],"Windows Media Connect compatible (ReadyDLNA)")
 		AC_DEFINE_UNQUOTED([ROOTDEV_MODELDESCRIPTION],"ReadyDLNA")
+		AM_CONDITIONAL(TIVO_SUPPORT, true)
+		AC_MSG_RESULT([yes])
+	else
+		AC_MSG_RESULT([no])
+	fi
+	],[
+		AC_MSG_RESULT([no])
+	]
+)
+
+AC_MSG_CHECKING([whether to build a video thumbnail support])
+AC_ARG_ENABLE(videothumbnail,
+        [  --enable-videothumbnail       enable video thumbnail generation using libavcodec and libswscale],[
+        if test "$enableval" = "yes"; then
+                AC_DEFINE([ENABLE_VIDEO_THUMB],[1],[Define to 1 if you want to enable video thumbnail generation])
                 AC_MSG_RESULT([yes])
+		ENABLE_THUMB=1
         else
                 AC_MSG_RESULT([no])
         fi
@@ -526,6 +578,18 @@ AC_ARG_ENABLE(readynas,
                 AC_MSG_RESULT([no])
         ]
 )
+if test x"$ENABLE_THUMB" = x"1"; then
+	if test -z "$HAVE_LIBSWSCALE"; then
+		AC_MSG_ERROR([videothumbnail requires libswscale headers])
+	fi
+
+
+	AC_CHECK_LIB(swscale ,[sws_getCachedContext], [LIBSWSCALE_LIBS="-lswscale"], [unset ac_cv_lib_swscale_getCachedContext])
+	AC_SUBST(LIBSWSCALE_LIBS)
+
+	AC_CHECK_LIB(avcodec ,[avcodec_version], [LIBAVCODEC_LIBS="-lavcodec"], [AC_MSG_ERROR([videothumbnail requires libavcodec - could not find libavcodec - part of ffmpeg])])
+	AC_SUBST(LIBAVCODEC_LIBS)
+fi
 
 AC_MSG_CHECKING([whether to build a static binary executable])
 AC_ARG_ENABLE(static,

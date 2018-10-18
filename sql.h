@@ -39,6 +39,8 @@ int sql_get_table(sqlite3 *db, const char *zSql, char ***pazResult, int *pnRow, 
 int sql_get_int_field(sqlite3 *db, const char *fmt, ...);
 int64_t sql_get_int64_field(sqlite3 *db, const char *fmt, ...);
 char * sql_get_text_field(sqlite3 *db, const char *fmt, ...);
+int open_db(sqlite3 **sq3);
 int db_upgrade(sqlite3 *db);
+int db_clear(sqlite3* db);
 
 #endif

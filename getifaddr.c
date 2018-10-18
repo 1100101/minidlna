@@ -43,6 +43,7 @@
 #endif
 
 #include "config.h"
+#include "event.h"
 #if HAVE_GETIFADDRS
 # include <ifaddrs.h>
 # ifdef __linux__
@@ -204,9 +205,13 @@ getsyshwaddr(char *buf, int len)
 				continue;
 			memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
 #else
+			if (p->ifa_addr->sa_family != AF_LINK)
+				continue;
 			struct sockaddr_dl *sdl;
 			sdl = (struct sockaddr_dl*)p->ifa_addr;
-			memcpy(mac, LLADDR(sdl), sdl->sdl_alen);
+			if (sdl->sdl_alen != 6)
+				continue;
+			memcpy(mac, LLADDR(sdl), 6);
 #endif
 			if (MACADDR_IS_ZERO(mac))
 				continue;
@@ -337,8 +342,9 @@ reload_ifaces(int force_notify)
 			DPRINTF(E_INFO, L_GENERAL, "Enabling interface %s/%s\n",
 				lan_addr[i].str, inet_ntoa(lan_addr[i].mask));
 			SendSSDPGoodbyes(lan_addr[i].snotify);
-			SendSSDPNotifies(lan_addr[i].snotify, lan_addr[i].str,
-					runtime_vars.port, runtime_vars.notify_interval);
+			char buf[LOCATION_URL_MAX_LEN] = {};
+			const char* host = get_location_url_by_lan_addr(buf, i);
+			SendSSDPNotifies(lan_addr[i].snotify, runtime_vars.notify_interval, host);
 		}
 	}
 }
@@ -377,9 +383,10 @@ OpenAndConfMonitorSocket(void)
 }
 
 void
-ProcessMonitorEvent(int s)
+ProcessMonitorEvent(struct event *ev)
 {
 #ifdef HAVE_NETLINK
+	int s = ev->fd;
 	int len;
 	char buf[4096];
 	struct nlmsghdr *nlh;

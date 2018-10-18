@@ -57,6 +57,10 @@
 #include <avformat.h>
 #endif
 
+#include "log.h"
+
+#define USE_CODECPAR LIBAVFORMAT_VERSION_INT >= ((57<<16)+(50<<8)+100)
+
 #ifndef FF_PROFILE_H264_BASELINE
 #define FF_PROFILE_H264_BASELINE 66
 #endif
@@ -115,6 +119,12 @@ typedef AVMetadataTag AVDictionaryEntry;
 # endif
 #endif
 
+#ifdef PIX_FMT_RGB32_1
+#define LAV_PIX_FMT_RGB32_1 PIX_FMT_RGB32_1
+#else
+#define LAV_PIX_FMT_RGB32_1 AV_PIX_FMT_RGB32_1
+#endif
+
 static inline int
 lav_open(AVFormatContext **ctx, const char *filename)
 {
@@ -166,7 +176,7 @@ lav_get_interlaced(AVStream *s)
 #endif
 }
 
-#if LIBAVCODEC_VERSION_MAJOR >= 57
+#if USE_CODECPAR
 #define lav_codec_id(s) s->codecpar->codec_id
 #define lav_codec_type(s) s->codecpar->codec_type
 #define lav_codec_tag(s) s->codecpar->codec_tag
@@ -195,7 +205,7 @@ lav_get_interlaced(AVStream *s)
 static inline uint8_t *
 lav_codec_extradata(AVStream *s)
 {
-#if LIBAVCODEC_VERSION_MAJOR >= 57
+#if USE_CODECPAR
 	if (!s->codecpar->extradata_size)
 		return NULL;
 	return s->codecpar->extradata;
@@ -221,4 +231,133 @@ lav_is_thumbnail_stream(AVStream *s, uint8_t **data, int *size)
 	}
 #endif
 	return 0;
+}
+
+static inline AVFrame*
+lav_frame_alloc(void)
+{
+#if LIBAVCODEC_VERSION_INT >= ((55<<16)+(28<<8)+1)
+	return av_frame_alloc();
+#else
+	return avcodec_alloc_frame();
+#endif
+}
+
+static inline void
+lav_frame_unref(AVFrame *ptr)
+{
+#if LIBAVCODEC_VERSION_INT >= ((55<<16)+(28<<8)+1)
+	return av_frame_unref(ptr);
+#else
+	return avcodec_get_frame_defaults(ptr);
+#endif
+}
+
+static inline void
+lav_free_packet(AVPacket *pkt)
+{
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 8, 0)
+	return av_packet_unref(pkt);
+#else
+	return av_free_packet(pkt);
+#endif
+}
+
+static inline int
+lav_avcodec_open(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
+{
+#if LIBAVCODEC_VERSION_INT >= ((53<<16)+(6<<8)+0)
+	return avcodec_open2(avctx, codec, options);
+#else
+	return avcodec_open(avctx, codec);
+#endif
+}
+
+static inline int
+lav_avcodec_decode_video(AVCodecContext *avctx, AVFrame *picture, int *got_picture_ptr, AVPacket *avpkt)
+{
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 36, 100)
+	int error = 0;
+	if((error = avcodec_send_packet(avctx, avpkt))) return error;
+	error = avcodec_receive_frame(avctx, picture);
+
+	// This is a bit tricky, I guess. The new interface does not map very well
+	// on the old interface. When we're done with the decoder, we may want to
+	// want to drain it (or not), depending on what we want to do with the
+	// decoder next. In the old interface this did not seem necessary, or
+	// perhaps it happened automatically?
+	// In either case, it seems like this function is only used from
+	// video_thumb.c::get_video_packet(), which is only interested in decoding
+	// a single frame. So for now we don't really need to do this (assuming it
+	// happens on close).
+	//
+	// Note: draining should only be done once a frame has been successfully
+	// received, otherwise no frame will ever be received. I.e. if we start
+	// emptying the codec before it has had enough data to produce a frame, we
+	// will not get any output.
+	//if(!error) {
+	//	// drain (may fail, don't care)
+	//	avcodec_send_packet(avctx, NULL);
+	//	AVFrame *dummy = lav_frame_alloc();
+	//	//while(avcodec_receive_frame(avctx, dummy) != AVERROR_EOF);
+	//	int res = 0;
+	//	do {
+	//		res = avcodec_receive_frame(avctx, dummy);// XXX unref?
+	//		char buf[128];
+	//		av_strerror(res, buf, 128);
+	//		fprintf(stderr, "lav_avcodec_decode_video: res: %d - %s\n", res, buf);
+	//		fflush(stderr);
+	//	} while(res != AVERROR_EOF);
+	//	lav_frame_unref(dummy);
+	//	avcodec_flush_buffers(avctx);
+	//}
+
+	if(!error) *got_picture_ptr = 1;
+	return error;
+#elif LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(52, 23, 0)
+	return avcodec_decode_video2(avctx, picture, got_picture_ptr, avpkt);
+#else
+	return avcodec_decode_video(avctx, picture, got_picture_ptr, avpkt->data, avpkt->size);
+#endif
+}
+
+static inline int
+lav_avpicture_deinterlace(AVFrame *dst, const AVFrame *src, enum AVPixelFormat pix_fmt, int width, int height)
+{
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(56, 0, 0)
+	// The interlaced_frame flag, which video_thumb.c uses to decide whether or
+	// not a frame requires deinterlacing does not seem to mean what one would
+	// think, or at least that is what is suggested here:
+	// http://libav-users.943685.n4.nabble.com/Libav-user-using-avpicture-deinterlace-td4660459.html
+	//
+	// I've tried a bunch of videos, and thusfar I've not yet found any video
+	// which had this flag set. This is not to say it cannot happen, but rather
+	// that at the moment I have no way to test it. If deinterlacing is indeed
+	// required, a somewhat complicated setup appears to be required, to set up
+	// a filter graph. Until I have a test case this will need to be postponed.
+	DPRINTF(E_WARN, L_ARTWORK, "deinterlacing of video frames is not implemented!\n");
+	return 0;
+#else
+	return avpicture_deinterlace((AVPicture*)dst, (AVPicture*)src, pix_fmt, width, height);
+#endif
+}
+
+// Taken from https://www.ffmpeg.org/doxygen/trunk/libavfilter_2fifo_8c_source.html#l00129
+// Did not find a public version (yet).
+static inline int
+calc_ptr_alignment(AVFrame *frame)
+{
+    int planes = av_sample_fmt_is_planar(frame->format) ?
+                 frame->channels : 1;
+    int min_align = 128;
+    int p;
+
+    for (p = 0; p < planes; p++) {
+        int cur_align = 128;
+        while ((intptr_t)frame->extended_data[p] % cur_align)
+            cur_align >>= 1;
+        if (cur_align < min_align)
+            min_align = cur_align;
+    }
+    return min_align;
 }

@@ -46,10 +46,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/param.h>
-#include <limits.h>
 
 #include "config.h"
 #include "upnpglobalvars.h"
@@ -58,7 +59,7 @@
 time_t startup_time = 0;
 
 struct runtime_vars_s runtime_vars;
-uint32_t runtime_flags = INOTIFY_MASK;
+uint32_t runtime_flags = INOTIFY_MASK | TIVO_BONJOUR_MASK | SUBTITLES_MASK;
 
 const char *pidfilename = "/var/run/minidlna/minidlna.pid";
 
@@ -83,9 +84,37 @@ sqlite3 *db;
 char friendly_name[FRIENDLYNAME_MAX_LEN];
 char db_path[PATH_MAX] = {'\0'};
 char log_path[PATH_MAX] = {'\0'};
+char icon_path[PATH_MAX] = {'\0'};
 struct media_dir_s * media_dirs = NULL;
 struct album_art_name_s * album_art_names = NULL;
-short int scanning = 0;
+pid_t scanner_pid = 0;
 volatile short int quitting = 0;
 volatile uint32_t updateID = 0;
 const char *force_sort_criteria = NULL;
+
+
+/* override the auto-detection of the 'LOCATION' key in UPNP responses
+ * (i.e. in the response to M-SEARCH, as well as when generating media links) */
+char location_url_override[MAX_LAN_ADDR][LOCATION_URL_MAX_LEN] = {};
+const char* get_location_url_by_lan_addr(char* buf, size_t addr) {
+	if(addr < n_lan_addr && location_url_override[addr][0]) {
+		return location_url_override[addr];
+	}
+	else {
+		snprintf(buf, LOCATION_URL_MAX_LEN, "http://%s:%d", lan_addr[addr].str, runtime_vars.port);
+		return buf;
+	}
+}
+
+const char* get_location_url_by_ifindex(char* buf, size_t ifindex) {
+	for(size_t i = 0; i < n_lan_addr; ++i) {
+		if(lan_addr[i].ifindex == ifindex) {
+			return get_location_url_by_lan_addr(buf, i);
+		}
+	}
+	return NULL;
+}
+
+void set_location_url_by_lan_addr(size_t addr, char* url) {
+	strncpy(location_url_override[addr], url, LOCATION_URL_MAX_LEN);
+}
