@@ -68,6 +68,7 @@ AC_C_BIGENDIAN
 AC_FUNC_FORK
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_CHECK_FUNCS([gethostname getifaddrs gettimeofday inet_ntoa memmove memset mkdir realpath select sendfile setlocale socket strcasecmp strchr strdup strerror strncasecmp strpbrk strrchr strstr strtol strtoul])
+AC_CHECK_DECLS([SEEK_HOLE])
 
 #
 # Check for struct ip_mreqn
@@ -392,12 +393,11 @@ AC_CHECK_LIB(pthread, pthread_create)
 # prior versions had ov_open_callbacks in libvorbis, test that, too.
 AC_CHECK_LIB(vorbisfile, ov_open_callbacks,
         [AC_CHECK_HEADERS([vorbis/vorbisfile.h],
-          AM_CONDITIONAL(HAVE_VORBISFILE, true)
-          AC_DEFINE(HAVE_VORBISFILE,1,[Have vorbisfile]),
-          AM_CONDITIONAL(HAVE_VORBISFILE, false)
-          AC_DEFINE(HAVE_VORBISFILE,0,[lacking vorbisfile]))],
-          AM_CONDITIONAL(HAVE_VORBISFILE, false),
-          -lvorbis -logg)
+         AM_CONDITIONAL(HAVE_VORBISFILE, true)
+         AC_DEFINE(HAVE_VORBISFILE,1,[Have vorbisfile]),
+         AM_CONDITIONAL(HAVE_VORBISFILE, false))],
+         AM_CONDITIONAL(HAVE_VORBISFILE, false),
+         -lvorbis -logg)
 AC_CHECK_LIB(FLAC, FLAC__stream_decoder_init_stream,
         [AC_CHECK_HEADERS([FLAC/all.h],
          AM_CONDITIONAL(HAVE_FLAC, true)
@@ -415,6 +415,14 @@ AC_CHECK_LIB(vorbisfile, vorbis_comment_query,
         AM_CONDITIONAL(NEED_VORBIS, false),
         AM_CONDITIONAL(NEED_VORBIS, true),
         -logg)
+
+AC_CHECK_LIB(avahi-client, avahi_threaded_poll_new,
+        [AC_CHECK_HEADERS([avahi-common/thread-watch.h],
+         AM_CONDITIONAL(HAVE_AVAHI, true)
+         AC_DEFINE(HAVE_AVAHI,1,[Have avahi]),
+         AM_CONDITIONAL(HAVE_AVAHI, false))],
+         AM_CONDITIONAL(HAVE_AVAHI, false),
+        -lavahi-client -lavahi-common)
 
 ################################################################################################################
 ### Header checks
@@ -442,6 +450,8 @@ AC_CHECK_FUNCS(inotify_init, AC_DEFINE(HAVE_INOTIFY,1,[Whether kernel has inotif
              AC_MSG_RESULT([no])
          ])
 ])
+
+AC_CHECK_FUNCS(kqueue, AM_CONDITIONAL(HAVE_KQUEUE, true), AM_CONDITIONAL(HAVE_KQUEUE, false))
 
 ################################################################################################################
 ### Build Options
@@ -478,11 +488,14 @@ AC_ARG_ENABLE(tivo,
 	[  --enable-tivo           enable TiVo support],[
 	if test "$enableval" = "yes"; then
 		AC_DEFINE(TIVO_SUPPORT, 1, [Define to 1 if you want to enable TiVo support])
+		AM_CONDITIONAL(TIVO_SUPPORT, true)
 		AC_MSG_RESULT([yes])
 	else
+		AM_CONDITIONAL(TIVO_SUPPORT, false)
 		AC_MSG_RESULT([no])
 	fi
 	],[
+		AM_CONDITIONAL(TIVO_SUPPORT, false)
 		AC_MSG_RESULT([no])
 	]
 )
@@ -518,13 +531,14 @@ AC_ARG_ENABLE(readynas,
 		AC_DEFINE_UNQUOTED([ROOTDEV_MANUFACTURER],"NETGEAR")
 		AC_DEFINE_UNQUOTED([ROOTDEV_MODELNAME],"Windows Media Connect compatible (ReadyDLNA)")
 		AC_DEFINE_UNQUOTED([ROOTDEV_MODELDESCRIPTION],"ReadyDLNA")
-                AC_MSG_RESULT([yes])
-        else
-                AC_MSG_RESULT([no])
-        fi
-        ],[
-                AC_MSG_RESULT([no])
-        ]
+		AM_CONDITIONAL(TIVO_SUPPORT, true)
+		AC_MSG_RESULT([yes])
+	else
+		AC_MSG_RESULT([no])
+	fi
+	],[
+		AC_MSG_RESULT([no])
+	]
 )
 
 AC_MSG_CHECKING([whether to build a static binary executable])

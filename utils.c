@@ -1,5 +1,5 @@
 /* MiniDLNA media server
- * Copyright (C) 2008-2009  Justin Maggard
+ * Copyright (C) 2008-2017  Justin Maggard
  *
  * This file is part of MiniDLNA.
  *
@@ -61,7 +61,7 @@ ends_with(const char * haystack, const char * needle)
 
 	if( nlen > hlen )
 		return 0;
- 	end = haystack + hlen - nlen;
+	end = haystack + hlen - nlen;
 
 	return (strcasecmp(end, needle) ? 0 : 1);
 }
@@ -231,10 +231,26 @@ escape_tag(const char *tag, int force_alloc)
 }
 
 char *
+duration_str(int msec)
+{
+	char *str;
+
+	xasprintf(&str, "%d:%02d:%02d.%03d",
+			(msec / 3600000),
+			(msec / 60000 % 60),
+			(msec / 1000 % 60),
+			(msec % 1000));
+
+	return str;
+}
+
+char *
 strip_ext(char *name)
 {
 	char *period;
 
+	if (!name)
+		return NULL;
 	period = strrchr(name, '.');
 	if (period)
 		*period = '\0';
@@ -282,7 +298,7 @@ make_dir(char * path, mode_t mode)
 				return -1;
 			}
 		}
-	        if (!c)
+		if (!c)
 			return 0;
 
 		/* Remove any inserted nul from the path. */
@@ -331,6 +347,8 @@ mime_to_ext(const char * mime)
 				return "3gp";
 			else if( strcmp(mime, "application/ogg") == 0 )
 				return "ogg";
+			else if( strcmp(mime+6, "x-dsd") == 0 )
+				return "dsd";
 			break;
 		case 'v':
 			if( strcmp(mime+6, "avi") == 0 )
@@ -398,7 +416,8 @@ is_audio(const char * file)
 		ends_with(file, ".m4a") || ends_with(file, ".aac")  ||
 		ends_with(file, ".mp4") || ends_with(file, ".m4p")  ||
 		ends_with(file, ".wav") || ends_with(file, ".ogg")  ||
-		ends_with(file, ".pcm") || ends_with(file, ".3gp"));
+		ends_with(file, ".pcm") || ends_with(file, ".3gp")  ||
+		ends_with(file, ".dsf") || ends_with(file, ".dff"));
 }
 
 int
@@ -417,6 +436,27 @@ int
 is_caption(const char * file)
 {
 	return (ends_with(file, ".srt") || ends_with(file, ".smi"));
+}
+
+media_types
+get_media_type(const char *file)
+{
+	const char *ext = strrchr(file, '.');
+	if (!ext)
+		return NO_MEDIA;
+	if (is_image(ext))
+		return TYPE_IMAGE;
+	if (is_video(ext))
+		return TYPE_VIDEO;
+	if (is_audio(ext))
+		return TYPE_AUDIO;
+	if (is_playlist(ext))
+		return TYPE_PLAYLIST;
+	if (is_caption(ext))
+		return TYPE_CAPTION;
+	if (is_nfo(ext))
+		return TYPE_NFO;
+	return NO_MEDIA;
 }
 
 int
@@ -446,7 +486,7 @@ int
 resolve_unknown_type(const char * path, media_types dir_type)
 {
 	struct stat entry;
-	unsigned char type = TYPE_UNKNOWN;
+	enum file_types type = TYPE_UNKNOWN;
 	char str_buf[PATH_MAX];
 	ssize_t len;
 
@@ -473,33 +513,64 @@ resolve_unknown_type(const char * path, media_types dir_type)
 		}
 		else if( S_ISREG(entry.st_mode) )
 		{
-			switch( dir_type )
-			{
-				case ALL_MEDIA:
-					if( is_image(path) ||
-					    is_audio(path) ||
-					    is_video(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_AUDIO:
-					if( is_audio(path) ||
-					    is_playlist(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_VIDEO:
-					if( is_video(path) )
-						type = TYPE_FILE;
-					break;
-				case TYPE_IMAGES:
-					if( is_image(path) )
-						type = TYPE_FILE;
-					break;
-				default:
-					break;
-			}
+			media_types mtype = get_media_type(path);
+			if (dir_type & mtype)
+				type = TYPE_FILE;
 		}
 	}
 	return type;
 }
 
+media_types
+valid_media_types(const char *path)
+{
+	struct media_dir_s *media_dir;
+
+	for (media_dir = media_dirs; media_dir; media_dir = media_dir->next)
+	{
+		if (strncmp(path, media_dir->path, strlen(media_dir->path)) == 0)
+			return media_dir->types;
+	}
+
+	return ALL_MEDIA;
+}
+
+/*
+ * Add and subtract routines for timevals.
+ * N.B.: subtract routine doesn't deal with
+ * results which are before the beginning,
+ * it just gets very confused in this case.
+ * Caveat emptor.
+ */
+static void	timevalfix(struct timeval *);
+void
+timevaladd(struct timeval *t1, const struct timeval *t2)
+{
+
+	t1->tv_sec += t2->tv_sec;
+	t1->tv_usec += t2->tv_usec;
+	timevalfix(t1);
+}
+
+void
+timevalsub(struct timeval *t1, const struct timeval *t2)
+{
+
+	t1->tv_sec -= t2->tv_sec;
+	t1->tv_usec -= t2->tv_usec;
+	timevalfix(t1);
+}
+
+static void
+timevalfix(struct timeval *t1)
+{
+
+	if (t1->tv_usec < 0) {
+		t1->tv_sec--;
+		t1->tv_usec += 1000000;
+	}
+	if (t1->tv_usec >= 1000000) {
+		t1->tv_sec++;
+		t1->tv_usec -= 1000000;
+	}
+}
