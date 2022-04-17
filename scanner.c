@@ -863,7 +863,7 @@ start_scanner()
 
 	setlocale(LC_COLLATE, "");
 
-	av_register_all();
+	//av_register_all();
 	av_log_set_level(AV_LOG_PANIC);
 	for( media_path = media_dirs; media_path != NULL; media_path = media_path->next )
 	{

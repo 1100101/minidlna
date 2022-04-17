@@ -714,7 +714,7 @@ start_inotify()
 	if (setpriority(PRIO_PROCESS, 0, 19) == -1)
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce inotify thread priority\n");
 	sqlite3_release_memory(1<<31);
-	av_register_all();
+	//av_register_all();
 
 	while( !quitting )
 	{

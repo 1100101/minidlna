@@ -473,7 +473,7 @@ GetAudioMetadata(const char *path, char *name)
 }
 
 /* For libjpeg error handling */
-jmp_buf setjmp_buffer;
+static jmp_buf setjmp_buffer;
 static void
 libjpeg_error_handler(j_common_ptr cinfo)
 {
@@ -690,18 +690,18 @@ GetVideoMetadata(const char *path, char *name)
 	for( i=0; i<ctx->nb_streams; i++)
 	{
 		if( audio_stream == -1 &&
-		    ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO )
+		    ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
 		{
 			audio_stream = i;
-			ac = ctx->streams[audio_stream]->codec;
+			ac = ctx->streams[audio_stream]->codecpar;
 			continue;
 		}
 		else if( video_stream == -1 &&
 		         !lav_is_thumbnail_stream(ctx->streams[i], &m.thumb_data, &m.thumb_size) &&
-			 ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO )
+			 ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO )
 		{
 			video_stream = i;
-			vc = ctx->streams[video_stream]->codec;
+			vc = ctx->streams[video_stream]->codecpar;
 			continue;
 		}
 	}
