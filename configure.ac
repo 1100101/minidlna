@@ -488,6 +488,13 @@ AC_CHECK_LIB(avahi-client, avahi_threaded_poll_new,
          AM_CONDITIONAL(HAVE_AVAHI, false),
         -lavahi-client -lavahi-common)
 
+#test if we have opus/opusfile
+
+PKG_CHECK_MODULES([opus], [opus opusfile],
+       AM_CONDITIONAL(HAVE_OPUS, true)
+       AC_DEFINE(HAVE_OPUS,1,[Define to 1 if you have opus/opusfile]),
+       AM_CONDITIONAL(HAVE_OPUS, false))
+
 ################################################################################################################
 ### Header checks
 
