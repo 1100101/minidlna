@@ -417,7 +417,8 @@ is_audio(const char * file)
 	return (ends_with(file, ".mp3") || ends_with(file, ".flac") ||
 		ends_with(file, ".wma") || ends_with(file, ".asf")  ||
 		ends_with(file, ".fla") || ends_with(file, ".flc")  ||
-		ends_with(file, ".m4a") || ends_with(file, ".aac")  ||
+		ends_with(file, ".m4a") || ends_with(file, ".m4b")  ||
+		ends_with(file, ".aac") ||
 		ends_with(file, ".mp4") || ends_with(file, ".m4p")  ||
 		ends_with(file, ".wav") || ends_with(file, ".ogg")  ||
 #ifdef HAVE_OPUS

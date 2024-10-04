@@ -1,3 +1,4 @@
+
 /* MiniDLNA media server
  * Copyright (C) 2013  NETGEAR
  *
@@ -58,6 +59,7 @@
 #endif
 
 #define USE_CODECPAR LIBAVFORMAT_VERSION_INT >= ((57<<16)+(50<<8)+100)
+#define HAVE_CH_LAYOUT (LIBAVUTIL_VERSION_INT >= ((57<<16)+(28<<8)+100))
 
 #ifndef FF_PROFILE_H264_BASELINE
 #define FF_PROFILE_H264_BASELINE 66
@@ -174,7 +176,11 @@ lav_get_interlaced(AVStream *s)
 #define lav_codec_tag(s) s->codecpar->codec_tag
 #define lav_sample_rate(s) s->codecpar->sample_rate
 #define lav_bit_rate(s) s->codecpar->bit_rate
+#if HAVE_CH_LAYOUT
+#define lav_channels(s) s->codecpar->ch_layout.nb_channels
+#else
 #define lav_channels(s) s->codecpar->channels
+#endif
 #define lav_width(s) s->codecpar->width
 #define lav_height(s) s->codecpar->height
 #define lav_profile(s) s->codecpar->profile

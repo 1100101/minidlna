@@ -17,6 +17,7 @@ configure
 depcomp
 install-sh
 m4/
+minidlnad
 missing
 mkinstalldirs
 po/Makefile.in.in

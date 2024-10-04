@@ -317,7 +317,7 @@ GetAudioMetadata(const char *path, const char *name)
 		strcpy(type, "mp3");
 		m.mime = strdup("audio/mpeg");
 	}
-	else if( ends_with(path, ".m4a") || ends_with(path, ".mp4") ||
+	else if( ends_with(path, ".m4a") || ends_with(path, ".mp4") || ends_with(path, ".m4b") ||
 	         ends_with(path, ".aac") || ends_with(path, ".m4p") )
 	{
 		strcpy(type, "aac");
