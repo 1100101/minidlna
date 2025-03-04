@@ -113,7 +113,6 @@ if(TIVO_SUPPORT AND HAVE_AVAHI)
     target_link_libraries(minidlnad PRIVATE PkgConfig::AVAHI)
 endif()
 
-
 install(TARGETS minidlnad DESTINATION ${CMAKE_INSTALL_SBINDIR})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/minidlnad.8 DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man8)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/minidlna.conf.5 DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man5)
